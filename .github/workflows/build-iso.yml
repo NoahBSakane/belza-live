@@ -35,9 +35,13 @@ jobs:
             -e ARCH=${{ matrix.arch }} \
             -v "$PWD":/work -w /work debian:trixie bash -euxc '
               apt-get update
+              if [ "$ARCH" = amd64 ]; then
+                EXTRA="syslinux syslinux-common isolinux grub-efi-amd64-bin grub-pc-bin"
+              else
+                EXTRA="grub-efi-arm64-bin"
+              fi
               apt-get install -y --no-install-recommends \
-                live-build debootstrap xorriso syslinux syslinux-common isolinux \
-                grub-efi-amd64-bin grub-efi-arm64-bin grub-pc-bin \
+                live-build debootstrap xorriso $EXTRA \
                 squashfs-tools ca-certificates git sudo dosfstools mtools cpio
               ./auto/config
               ./auto/build
