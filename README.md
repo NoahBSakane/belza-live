@@ -9,6 +9,7 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 - Live の診断環境: `smartmontools`・`mdadm`・`btrfs-progs`・`hdparm`・`nvme-cli`・`gddrescue`・`testdisk`・`fio`・`memtester`・`iperf3`・`restic` など(`config/package-lists/diag.list.chroot`)。
 - Debian Installer(`--debian-installer live`)。`config/includes.installer/preseed.cfg` は、ロケール・キーボード・時刻・ミラーだけを決め、**ディスクには触れない**(何も自動で消さない)。
 - ディスクを無人で構成する例(md RAID1 の 3 台ミラー + BIOS boot + データ用の区画)は `examples/` にある。**対象のディスクを、すべて消す**ので、内容を読み、実際の構成に合わせて、明示的に使うこと。
+- 安全装置 `disk-guard.sh`(ISO の `/cdrom/disk-guard.sh`)は、消す前に、対象のディスクが想定どおり(USB でない・取り外し可能でない・容量が範囲内・型番が合う)かを確かめ、1 つでも違えば、何も消さずに終わる。試験は `tests/test-disk-guard.sh`(条件を外した版で失敗することも確認済み)。
 
 ## 作り方
 
