@@ -1,0 +1,45 @@
+#!/bin/sh
+# shellcheck source=auto/survey/hw-common.sh
+. "$(dirname "$0")/hw-common.sh"
+BOOT_DISKS=$(boot_disks)
+if printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!起動媒体未判定'; then
+    printf '%s\n' '未取得: 起動媒体の親ディスク'
+fi
+command -v lsblk >/dev/null 2>&1 || missing lsblk
+for disk in $(disks); do
+    blk=$HW_SYSFS/block/$disk
+    boot=; is_boot "$disk" && boot=' (起動媒体)'
+    printf 'ディスク: %s%s\n' "$disk" "$boot"
+    smart=$(smart_data "$disk")
+    model=$(read_value "$blk/device/model")
+    [ "$model" != 不明 ] || model=$(read_value "$blk/device/name")
+    if [ "$model" = 不明 ]; then
+        model=$(printf '%s\n' "$smart" | sed -n 's/^Device Model: *//p;s/^Model Number: *//p;s/^Product: *//p' | head -n 1)
+        model=${model:-不明}
+    fi
+    serial=$(read_value "$blk/device/serial")
+    if [ "$serial" = 不明 ]; then
+        serial=$(printf '%s\n' "$smart" | sed -n 's/^Serial [Nn]umber: *//p' | head -n 1)
+        serial=${serial:-不明}
+    fi
+    printf '型番: %s\nシリアル: %s\n容量: %s\n' "$model" "$serial" "$(capacity "$disk")"
+    conn=$(connection "$disk")
+    link=$(printf '%s\n' "$smart" | sata_link); link=${link:-不明}
+    health=$(printf '%s\n' "$smart" | smart_health)
+    printf '回転: %s\n接続: %s\nremovable: %s\n読み取り専用: %s\nSATA リンク: %s\nSMART 健康: %s\n' \
+        "$(read_value "$blk/queue/rotational")" "$conn" "$(read_value "$blk/removable")" "$(read_value "$blk/ro")" "$link" "$health"
+    printf '%s\n' "$smart" | smart_attributes
+    # NVMe の情報も原単位のまま残す。ATA の 241/242 の単位も機種に依存する。
+    printf '%s\n' "$smart" | awk '/^(Power On Hours|Percentage Used|Data Units Written|Data Units Read|Temperature|Media and Data Integrity Errors):/ {print "NVMe " $0}'
+    hours=$(printf '%s\n' "$smart" | awk '$1==9 && $3 ~ /^0x/ {print $10; exit} /^Power On Hours:/ {sub(/^.*: */, ""); print; exit}')
+    printf '電源投入時間: %s\n' "${hours:-不明}"
+    attention=$(printf '%s\n' "$smart" | awk '$3 ~ /^0x/ && ($1==5||$1==187||$1==197||$1==198||$1==199) && $10+0!=0 {printf "%s=%s ",$1,$10}
+        /^Media and Data Integrity Errors:/ {v=$0; sub(/^.*: */,"",v); gsub(/,/,"",v); if(v+0>0) printf "NVMe訂正不能=%s ",v}')
+    [ "$health" = PASSED ] || attention="$attention SMART=$health"
+    [ "$link" != '1.5Gb/s' ] || attention="$attention SATA低速"
+    printf '%s\n' "$smart" | grep -q '未取得:' && printf '%s\n' "$smart"
+    if ! printf '%s\n' "$smart" | grep -Eq 'SMART overall-health|SMART Health Status:'; then
+        printf '%s\n' '未取得: SMART 情報(非対応・権限・変換器を確認)'
+    fi
+    printf '注意: %s\n\n' "${attention:-なし}"
+done

@@ -13,6 +13,9 @@ FLAVOR="${FLAVOR:-cli}"
 rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chroot
 rm -f config/hooks/live/0200-icewm-keys.hook.chroot
 rm -rf config/includes.chroot
+mkdir -p config/includes.chroot/usr/local/bin
+cp auto/survey/* config/includes.chroot/usr/local/bin/
+chmod +x config/includes.chroot/usr/local/bin/*
 case "$FLAVOR" in
 	cli) ;;
 	lxqt)
