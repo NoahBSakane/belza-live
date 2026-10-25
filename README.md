@@ -25,6 +25,52 @@ GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)
 
 手元で作る場合は、Debian 13 の amd64 の環境(仮想マシンやコンテナ)で、`live-build`・`debootstrap`・`xorriso`・`syslinux` などを入れ、`./auto/config && ./auto/build` を実行する。ビルド領域に約 13GB が要る。
 
+## QEMU での起動試験
+
+Mac では Homebrew の QEMU(`brew install qemu`)と Python 3 を使う。`tests/qemu-boot.py` は Python の標準ライブラリだけで動き、TCG による CPU エミュレーションで ISO を起動する。実ディスクは接続しない。
+
+```sh
+# amd64・Legacy BIOS(既定)。起動後、このターミナルは制御待ちになる。
+python3 -I tests/qemu-boot.py --iso bootkit-linux-amd64-cli.iso \
+  --prefix /private/tmp/bootkit-bios
+
+# amd64・UEFI
+python3 -I tests/qemu-boot.py --iso bootkit-linux-amd64-cli.iso \
+  --firmware uefi --prefix /private/tmp/bootkit-uefi
+
+# arm64 は UEFI を明示する。
+python3 -I tests/qemu-boot.py --iso bootkit-linux-arm64-cli.iso \
+  --arch arm64 --firmware uefi --prefix /private/tmp/bootkit-arm64
+```
+
+`--mem` は MiB(既定 2048)、`--smp` は CPU 数(既定 2)、`--timeout` は起動からの期限(既定 3600 秒)。期限を超えると QEMU を止め、終了コード 1 で終了する。`--dry-run` を付けると、QEMU を起動せず、組み立てたコマンドを表示する(可変領域のパスは仮のもの)。UEFI ファームウェアは `brew --prefix` 配下の `share/qemu` から探し、可変領域のテンプレートがあれば一時コピーを使う。
+
+`ready:` が出たら、別のターミナルから `<prefix>.ctl` にコマンドを行単位で追記する。起動時に既存の ctl は空にする。同じ prefix を同時に使わないこと。
+
+```sh
+cat >> /private/tmp/bootkit-bios.ctl <<'EOF'
+wait 10
+shot boot
+type uname -a
+key ret
+wait 2
+shot result
+quit
+EOF
+```
+
+- `shot 名前`: `<prefix>-名前.png` を保存する。名前は英数字・`_`・`.`・`-` が使える。
+- `type 文字列`: 英数字・ASCII 記号をキーとして送る。末尾の Enter は送らない。
+- `key キー名`: QEMU の `sendkey` のキー名を送る(`ret`、`esc`、`ctrl-alt-f2` など)。
+- `wait 秒`: 指定した秒数だけ待つ。待っている間も実行期限は有効。
+- `quit`: QEMU を止めて終了する。
+
+ゲストを `keyboard-layouts=jp` で起動する場合は、スクリプトにも `--kbd jp` を付ける。既定は US 配列。JIS 配列では `|` は `shift-yen`、`=` は `shift-minus`、`^` は `equal` として送る。この指定はゲストの配列自体を切り替えない。日本語の文字列は直接入力できない。
+
+QEMU の標準出力・標準エラーは `<prefix>.qemu.log` に保存する(同じ prefix で再起動すると上書き)。起動失敗時にはログの末尾も表示する。終了・中断時には QEMU、短いパスのモニターソケット、一時コピーした可変領域を片付け、ctl・PNG・ログを残す。
+
+引数の組み立てとキー配列の試験は `bash tests/test-qemu-boot-args.sh` で実行できる。この試験は QEMU を起動しない。
+
 ## 既知の注意
 
 - `--memtest` は、Debian の `live-build` の不具合(#1122654。memtest86+ 8.x でファイル名が変わった)のため、いまは `none` にしている。必要なら、バイナリを `config/includes.binary` に置く。
