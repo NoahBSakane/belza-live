@@ -1,4 +1,4 @@
-# belza-live
+# bootkit-linux
 
 Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian インストーラーを 1 本にまとめた ISO を、`live-build` で作る設定。Legacy BIOS(syslinux)だけの古い PC でも起動できる iso-hybrid を狙う。ビルドは GitHub Actions(`debian:trixie` の特権コンテナ)で行う。
 

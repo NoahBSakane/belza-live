@@ -24,8 +24,8 @@ lb config noauto \
 	--memtest none \
 	--firmware-chroot true \
 	--firmware-binary true \
-	--iso-application "belza-live" \
+	--iso-application "bootkit-linux" \
 	--iso-publisher "NoahBSakane" \
-	--iso-volume "BELZA-LIVE-$ARCH" \
+	--iso-volume "BOOTKIT-LINUX-$ARCH" \
 	--bootappend-live "boot=live components quiet locales=en_US.UTF-8 keyboard-layouts=jp timezone=Asia/Tokyo" \
 	"${@}"
