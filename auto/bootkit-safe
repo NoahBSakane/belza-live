@@ -18,5 +18,5 @@ for name in 64-md-raid-assembly.rules 63-md-raid-arrays.rules 69-lvm.rules; do
 done
 # 遅れて接続されたディスク・パーティションにも適用する。
 # shellcheck disable=SC2016
-printf '%s\n' 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*", RUN+="/sbin/blockdev --setro $devnode"' \
+printf '%s\n' 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*|fd*", RUN+="/sbin/blockdev --setro $devnode"' \
     > "$rules/99-bootkit-safe.rules"

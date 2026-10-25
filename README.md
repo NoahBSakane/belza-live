@@ -69,6 +69,8 @@ sha256sum --ignore-missing -c SHA256SUMS
 
 Mac では Homebrew の QEMU(`brew install qemu`)と Python 3 を使う。`tests/qemu-boot.py` は Python の標準ライブラリだけで動き、TCG による CPU エミュレーションで ISO を起動する。実ディスクは接続しない。
 
+TCG(CPU のエミュレーション)は、ホストの CPU が動画処理やディスクイメージの圧縮などの重い処理で埋まっていると、極端に遅くなり、起動が止まったように見える。この間、ゲストの時間はほとんど進まない。試験はホストの負荷が低いときに行う。参考値として、負荷が低い Mac では、CLI 版は BIOS・2GB・2 コアでログインまで約 3〜5 分かかる。
+
 ```sh
 # amd64・Legacy BIOS(既定)。起動後、このターミナルは制御待ちになる。
 python3 -I tests/qemu-boot.py --iso bootkit-linux-amd64-cli.iso \
