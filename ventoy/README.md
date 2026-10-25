@@ -62,7 +62,7 @@ Ventoy で ISO を選ぶと、自動インストールのテンプレート選�
 
 | ISO 内の項目 | 動作 |
 | --- | --- |
-| Server only (text mode) | 既定。30 秒で選択。`multi-user.target` で文字画面を起動 |
+| Server only (text mode) | 既定。30 秒で選択。`multi-user.target` で文字画面を起動。tty1 は起動ログのまま止まって見えるが、ログインプロンプトは tty2(Alt+F2)に出る(`ubuntu` ユーザー、パスワードなし) |
 | Lubuntu (LXQt, needs the pack) | 追加パック導入後、LXQt セッションを選択 |
 | Ubuntu (GNOME) | 元の Try or Install Ubuntu と同じカーネル引数。追加後も GNOME を選択 |
 | Ubuntu (safe graphics) | `nomodeset` を使う |
@@ -129,6 +129,14 @@ sh tests/test-ventoy-bundle.sh --check-packages --download
 ```
 
 `resolute/main` と `resolute/universe` の公式 `binary-amd64/Packages.xz` を読み、追加パッケージと purge 対象名の実在を確認する。ネットワークがない・取得できない場合は終了コード 77。`--download` を省くと通信せず 77 を返す。ローカルの `main.xz` と `universe.xz` を使う場合は `--indexes /path/to/indexes` を指定する。パッケージ名の実在検査であり、依存解決や公式 Server manifest との同等性の検査ではない。
+
+## 検証済みの項目
+
+- 2026-10-26: 公式 `ubuntu-26.04.1-desktop-amd64.iso`(SHA-256 は公式の一覧と一致)の `/boot/grub/grub.cfg` を、この一式の `ventoy/ubuntu/grub.cfg` に差し替えた ISO を、QEMU(UEFI、4GiB、TCG)で起動した。Ventoy は介さない。
+  - 「Server only (text mode)」(既定): カーネルのコマンドラインに `systemd.unit=multi-user.target bootkit.session=server` が渡り、GDM は inactive、文字画面のログインプロンプト(tty2)まで到達した。カーネルは 7.0.0-30-generic。
+  - 「Ubuntu (GNOME)」: plymouth のあと GDM のログイン画面(Live session user)まで到達した(QEMU の TCG で約 15 分)。
+  - 追加パック(`bootkit-motd` の案内、Lubuntu、persistence)は、この試験には含まれない。
+- 2026-10-26: Ubuntu 26.04(resolute)の main / universe の索引で、自動インストール用 YAML と purge 対象の 14 パッケージ名の実在を確認した(`ventoy/check-package-index.py --download`)。
 
 ## 未検証の項目
 
