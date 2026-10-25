@@ -152,7 +152,7 @@ for directory in ['usr/share/xsessions', 'usr/share/wayland-sessions', 'etc',
 selector = (bundle / 'ubuntu/bootkit-session.sh').read_text()
 # The script text is edited by string replacement, so point it at a symlink whose path has no spaces.
 import tempfile
-root_link_dir = Path(tempfile.mkdtemp(prefix='bootkit-root.'))
+root_link_dir = Path(tempfile.mkdtemp(prefix='bootkit-root.', dir='/tmp'))
 root_link = root_link_dir / 'r'
 root_link.symlink_to(root)
 for prefix in ['/etc/', '/var/lib/', '/proc/', '/usr/share/']:
