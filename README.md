@@ -23,6 +23,16 @@ IceWM では、携帯回線モデムを管理する ModemManager を削除する
 
 日本語入力の Fcitx5 / Mozc は同梱するが、自動では起動しない。IceWM 上で `Ctrl+Alt+J`、または端末から `ime-on` で起動し、そのあとに起動するアプリで日本語入力を使う。入力用の環境変数は X セッションの開始時に設定する。IceWM の既定のキー割り当て(`Alt+Tab` など)も使える。
 
+## 起動メニュー
+
+既存の Live・fail-safe(カーネルの互換性設定)・インストーラーの項目に加え、全フレーバーで次を選べる。amd64 は Legacy BIOS と UEFI、arm64 は UEFI に対応する。
+
+- `Live system, copy to RAM`: 通常の Live に `toram` を加え、Live のファイルシステムを RAM にコピーする。コピーを完了して起動したあとは起動 USB を取り外せる。Live のコピーと通常の動作に足りる RAM が必要。
+- `Live system, safe mode`: 通常の Live に `bootkit.safe=1` を加える。udev(機器の検出と初期設定を行う仕組み)が起動する前に、md ソフトウェア RAID の自動組み立てと LVM の自動有効化の規則を無効にする。検出したブロックデバイスとパーティションを `blockdev --setro` で読み取り専用にする。`loop*`・`ram*`・`sr*`・`zram*` は対象外。規則は Live 起動後も残り、あとから接続された機器にも適用する。
+- `Memtest86+`: amd64 のみ。BIOS・UEFI とも `Utilities` 内からメモリーを検査できる。arm64 には表示しない。
+
+安全モードは、壊れかけのディスクに対する OS の自動処理による書き込みを抑えるためのもの。ハードウェアの書き込み防止装置ではなく、管理者による明示的な操作は禁止しない。たとえば `mdadm --assemble` の実行や `blockdev --setrw` による解除は可能で、機器への直接のコマンドや機器自身の内部処理まで防ぐものではない。udev の規則以外から行う RAID 組み立て・LVM 有効化も制限しない。安全モードでも起動 USB 自体を読み取り専用にするため、USB の書き換えには解除が要る。実機での安全モードの動作確認は未実施。
+
 ## 作り方
 
 GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)か、`auto/` と `config/` を変更して main に push する。成果物の ISO と `SHA256SUMS` が、アーティファクトに 30 日保管される。
@@ -93,7 +103,7 @@ QEMU の標準出力・標準エラーは `<prefix>.qemu.log` に保存する(�
 
 ## 既知の注意
 
-- `--memtest` は、Debian の `live-build` の不具合(#1122654。memtest86+ 8.x でファイル名が変わった)のため、いまは `none` にしている。必要なら、バイナリを `config/includes.binary` に置く。
+- Memtest86+ は amd64 で有効、arm64 では無効。trixie の memtest86+ 7.20-1 は live-build 20250505+deb13u1 が扱うファイル名と一致する。[Debian #1122654](https://bugs.debian.org/1122654) は 8.x でのファイル名変更に関する不具合であり、8.x に更新する場合は再確認が要る。
 - Debian 13 の公式 Live も、完全には再現可能ではない(boot 画面とファームウェアの一部が異なる。squashfs は再現できる)。この ISO も、SHA-256 の完全一致は目標にしない。固定できるのは、設定とパッケージの版まで。
 - ファームウェア(`non-free-firmware`)を含めている。不要なら、`auto/config` の `--archive-areas` と `--firmware-*` を変える。
 
