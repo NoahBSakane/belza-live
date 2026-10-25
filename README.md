@@ -15,6 +15,12 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 - ディスクを無人で構成する例(md RAID1 の 3 台ミラー + BIOS boot + データ用の区画)は `examples/` にある。**対象のディスクを、すべて消す**ので、内容を読み、実際の構成に合わせて、明示的に使うこと。
 - 安全装置 `disk-guard.sh`(ISO の `/cdrom/disk-guard.sh`)は、消す前に、対象のディスクが想定どおり(USB でない・取り外し可能でない・容量が範囲内・型番が合う)かを確かめ、1 つでも違えば、何も消さずに終わる。試験は `tests/test-disk-guard.sh`(条件を外した版で失敗することも確認済み)。
 
+## Clonezilla・partclone の版
+
+Clonezilla と partclone は、trixie より新しい複製・復元ツールを使うため、forky から限定して入れる。Clonezilla 5.19.7・DRBL 5.11.15・partclone 0.3.49 と、追加で必要な `libntfs-3g91` だけを対象にし、それ以外は trixie のままにする。全フレーバー・amd64 / arm64 に共通で、Live の端末から `sudo clonezilla` で使える。
+
+対象は `config/forky-packages.txt` で管理し、APT の優先度で更新範囲を限定する。版は公開索引の更新に伴って変わるため、依存関係をビルド前に検査する。[確認した版・依存関係と検査方法](docs/forky-pins.md)を参照。
+
 ## フレーバー
 
 `FLAVOR` で、同じ診断ツールに足すデスクトップを選ぶ(`auto/config`)。ISO 名は `bootkit-linux-<arch>-<flavor>.iso`。

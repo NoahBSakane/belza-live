@@ -107,6 +107,19 @@ EOF
 		;;
 	*) echo "unsupported FLAVOR: $FLAVOR" >&2; exit 1 ;;
 esac
+# forky は複製ツールと、trixie で満たせないライブラリだけに限定する。
+mkdir -p config/archives
+printf '%s\n' 'deb http://deb.debian.org/debian forky main' > config/archives/forky.list.chroot
+{
+    printf '%s\n' 'Package: *' 'Pin: release n=forky' 'Pin-Priority: 100' ''
+    while IFS= read -r package; do
+        case "$package" in
+            ''|\#*) continue ;;
+            *[!a-z0-9+.-]*) echo "invalid forky package: $package" >&2; exit 1 ;;
+        esac
+        printf 'Package: %s\nPin: release n=forky\nPin-Priority: 990\n\n' "$package"
+    done < config/forky-packages.txt
+} > config/archives/forky.pref.chroot
 # ネットワーク関連の既定動作は全フレーバーで共通。
 mkdir -p config/hooks/live config/includes.chroot/usr/local/bin
 cat > config/hooks/live/0100-no-modemmanager.hook.chroot <<'EOF'
