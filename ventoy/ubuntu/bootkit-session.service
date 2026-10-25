@@ -1,0 +1,12 @@
+[Unit]
+Description=Select the bootkit Live desktop session
+After=local-fs.target
+Before=display-manager.service gdm3.service sddm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bootkit-session
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

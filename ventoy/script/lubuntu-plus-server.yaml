@@ -1,0 +1,22 @@
+#cloud-config
+# ディスクは storage 画面で人が選ぶ。Ventoy USB を選ばないこと。
+# 自動化する場合だけ、公式仕様で末尾を確かめた
+# $$VT_LINUX_DISK_NONVTOY_CLOSEST_...$$ を storage.match 等に指定する。
+# これは接頭辞の説明用であり、有効な変数名でも安全確認の代用でもない。
+autoinstall:
+  version: 1
+  source: {id: ubuntu-desktop-minimal}
+  interactive-sections: [storage, identity]
+  locale: en_US.UTF-8
+  keyboard: {layout: jp}
+  timezone: Asia/Tokyo
+  ssh: {install-server: false}
+  packages: [lubuntu-desktop, ubuntu-server, openssh-server]
+  late-commands:
+    # DM の構成だけは失敗を警告して続行する。SSH の無効化は失敗させる。
+    - |
+      curtin in-target --target=/target -- sh -c '
+        printf "%s\n" "sddm shared/default-x-display-manager select sddm" | debconf-set-selections &&
+        DEBIAN_FRONTEND=noninteractive dpkg-reconfigure sddm
+      ' || echo 'WARNING: sddm configuration failed' >&2
+    - curtin in-target --target=/target -- systemctl disable ssh.service ssh.socket

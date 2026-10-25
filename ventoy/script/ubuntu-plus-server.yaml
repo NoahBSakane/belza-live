@@ -1,0 +1,16 @@
+#cloud-config
+# ディスクは storage 画面で人が選ぶ。Ventoy USB を選ばないこと。
+# 自動化する場合だけ、公式仕様で末尾を確かめた
+# $$VT_LINUX_DISK_NONVTOY_CLOSEST_...$$ を storage.match 等に指定する。
+# これは接頭辞の説明用であり、有効な変数名でも安全確認の代用でもない。
+autoinstall:
+  version: 1
+  source: {id: ubuntu-desktop-minimal}
+  interactive-sections: [storage, identity]
+  locale: en_US.UTF-8
+  keyboard: {layout: jp}
+  timezone: Asia/Tokyo
+  ssh: {install-server: false}
+  packages: [ubuntu-server, openssh-server]
+  late-commands:
+    - curtin in-target --target=/target -- systemctl disable ssh.service ssh.socket

@@ -4,6 +4,8 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 
 状態: **試作中**。実機での起動は、まだ確認していない。
 
+- [Ventoy の USB 用の一式](ventoy/README.md)
+
 ## 何が入るか
 
 - Live の診断環境: `smartmontools`・`mdadm`・`btrfs-progs`・`hdparm`・`nvme-cli`・`gddrescue`・`testdisk`・`fio`・`memtester`・`iperf3`・`restic` など(`config/package-lists/diag.list.chroot`)。
