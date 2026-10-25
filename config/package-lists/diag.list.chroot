@@ -36,3 +36,62 @@ restic
 clonezilla
 partclone
 partimage
+
+# 起動修復・複製・転送
+efibootmgr
+fsarchiver
+cifs-utils
+sshfs
+nfs-common
+dislocker
+chntpw
+
+# 展開器(他の Clonezilla で作ったイメージの復元用)
+zstd
+lz4
+xz-utils
+bzip2
+lzop
+lbzip2
+pbzip2
+lzip
+plzip
+lrzip
+
+# 無線 LAN
+wpasupplicant
+iw
+network-manager
+
+# 補助(B): 消去・仮想ディスク・操作・調査・救出
+nwipe
+qemu-utils
+cloud-guest-utils
+kpartx
+wimtools
+mc
+htop
+ncdu
+pv
+nmap
+socat
+netcat-openbsd
+lm-sensors
+hwinfo
+f3
+stress-ng
+gpart
+foremost
+safecopy
+
+# 起動ローダー修復(アーキテクチャ別)
+#if ARCHITECTURES amd64
+grub-pc-bin
+grub-efi-amd64-bin
+grub2-common
+memtest86+
+#endif
+#if ARCHITECTURES arm64
+grub-efi-arm64-bin
+grub2-common
+#endif

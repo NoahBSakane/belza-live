@@ -7,6 +7,10 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 ## 何が入るか
 
 - Live の診断環境: `smartmontools`・`mdadm`・`btrfs-progs`・`hdparm`・`nvme-cli`・`gddrescue`・`testdisk`・`fio`・`memtester`・`iperf3`・`restic` など(`config/package-lists/diag.list.chroot`)。
+- 起動修復・複製・転送: `efibootmgr`・`fsarchiver`・CIFS / SSHFS / NFS・`dislocker`・`chntpw`。GRUB の修復用ツールは amd64 / arm64 ごとに同梱し、amd64 には `memtest86+` も入れる。
+- イメージの展開: Zstandard・LZ4・XZ・bzip2・LZO・lzip・lrzip と、bzip2 / lzip の並列展開器。他の Clonezilla で作ったイメージの復元に使う。
+- 無線 LAN: `wpasupplicant`・`iw`・NetworkManager。
+- 補助ツール: `nwipe` による消去、QEMU / WIM のイメージ操作、`mc`・`htop`・`ncdu`・`pv`、ネットワーク・センサー・媒体の調査、`stress-ng`、`gpart`・`foremost`・`safecopy` による救出。
 - Debian Installer(`--debian-installer live`)。`config/includes.installer/preseed.cfg` は、ロケール・キーボード・時刻・ミラーだけを決め、**ディスクには触れない**(何も自動で消さない)。
 - ディスクを無人で構成する例(md RAID1 の 3 台ミラー + BIOS boot + データ用の区画)は `examples/` にある。**対象のディスクを、すべて消す**ので、内容を読み、実際の構成に合わせて、明示的に使うこと。
 - 安全装置 `disk-guard.sh`(ISO の `/cdrom/disk-guard.sh`)は、消す前に、対象のディスクが想定どおり(USB でない・取り外し可能でない・容量が範囲内・型番が合う)かを確かめ、1 つでも違えば、何も消さずに終わる。試験は `tests/test-disk-guard.sh`(条件を外した版で失敗することも確認済み)。
