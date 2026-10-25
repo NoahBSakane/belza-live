@@ -86,7 +86,7 @@ check_safe() {
         [ -f "$rules/$name" ] && [ ! -s "$rules/$name" ] || fail "$name が空のマスクでない"
     done
     # shellcheck disable=SC2016
-    contains "$rules/99-bootkit-safe.rules" 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*", RUN+="/sbin/blockdev --setro $devnode"'
+    contains "$rules/99-bootkit-safe.rules" 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*|fd*", RUN+="/sbin/blockdev --setro $devnode"'
     [ "$(find "$rules" -type f | wc -l | tr -d ' ')" = 4 ] || fail '予期しないルールがある'
     rm -r "$rules"
     # 先頭・末尾・唯一の引数でも一致する。
