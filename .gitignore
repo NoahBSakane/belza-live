@@ -1,0 +1,17 @@
+# live-build の生成物
+/binary/
+/chroot/
+/cache/
+/.build/
+/config/binary
+/config/bootstrap
+/config/chroot
+/config/common
+/config/source
+/build.log
+*.iso
+*.contents
+*.files
+*.packages
+*.zsync
+SHA256SUMS

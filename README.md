@@ -1,0 +1,33 @@
+# belza-live
+
+Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian インストーラーを 1 本にまとめた ISO を、`live-build` で作る設定。Legacy BIOS(syslinux)だけの古い PC でも起動できる iso-hybrid を狙う。ビルドは GitHub Actions(`debian:trixie` の特権コンテナ)で行う。
+
+状態: **試作中**。実機での起動は、まだ確認していない。
+
+## 何が入るか
+
+- Live の診断環境: `smartmontools`・`mdadm`・`btrfs-progs`・`hdparm`・`nvme-cli`・`gddrescue`・`testdisk`・`fio`・`memtester`・`iperf3`・`restic` など(`config/package-lists/diag.list.chroot`)。
+- Debian Installer(`--debian-installer live`)。`config/includes.installer/preseed.cfg` は、ロケール・キーボード・時刻・ミラーだけを決め、**ディスクには触れない**(何も自動で消さない)。
+- ディスクを無人で構成する例(md RAID1 の 3 台ミラー + BIOS boot + データ用の区画)は `examples/` にある。**対象のディスクを、すべて消す**ので、内容を読み、実際の構成に合わせて、明示的に使うこと。
+
+## 作り方
+
+GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)か、`auto/` と `config/` を変更して main に push する。成果物の ISO と `SHA256SUMS` が、アーティファクトに 30 日保管される。
+
+手元で作る場合は、Debian 13 の amd64 の環境(仮想マシンやコンテナ)で、`live-build`・`debootstrap`・`xorriso`・`syslinux` などを入れ、`./auto/config && ./auto/build` を実行する。ビルド領域に約 13GB が要る。
+
+## 既知の注意
+
+- `--memtest` は、Debian の `live-build` の不具合(#1122654。memtest86+ 8.x でファイル名が変わった)のため、いまは `none` にしている。必要なら、バイナリを `config/includes.binary` に置く。
+- Debian 13 の公式 Live も、完全には再現可能ではない(boot 画面とファームウェアの一部が異なる。squashfs は再現できる)。この ISO も、SHA-256 の完全一致は目標にしない。固定できるのは、設定とパッケージの版まで。
+- ファームウェア(`non-free-firmware`)を含めている。不要なら、`auto/config` の `--archive-areas` と `--firmware-*` を変える。
+
+## 参考にした先行事例
+
+- [nodiscc/debian-live-config](https://github.com/nodiscc/debian-live-config)(GPL-3.0): trixie、`--debian-installer live`、memtest86+、BIOS と UEFI のオフラインインストールの試験。
+- [jasonfen/rescuebot](https://github.com/jasonfen/rescuebot)(GPL-3.0): 診断ツール入りの trixie の ISO、snapshot.debian.org での日付の固定。
+- [jandie1505/rescue-os](https://github.com/jandie1505/rescue-os)(GPL-3.0): GitHub Actions の特権コンテナでのビルド。
+
+## ライセンス
+
+GPL-3.0(`LICENSE`)。

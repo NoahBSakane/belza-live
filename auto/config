@@ -1,0 +1,23 @@
+#!/bin/sh
+# live-build の設定。Debian 13(trixie)amd64、Legacy BIOS(syslinux)で起動する iso-hybrid。
+# Live(診断環境)と Debian Installer の両方の起動メニューを持つ。インストーラーは、既定では何も消さない(preseed なし)。
+set -e
+lb config noauto \
+	--mode debian \
+	--distribution trixie \
+	--architectures amd64 \
+	--linux-flavours amd64 \
+	--archive-areas "main contrib non-free-firmware" \
+	--binary-images iso-hybrid \
+	--bootloaders syslinux \
+	--debian-installer live \
+	--debian-installer-distribution trixie \
+	--debian-installer-gui false \
+	--memtest none \
+	--firmware-chroot true \
+	--firmware-binary true \
+	--iso-application "belza-live" \
+	--iso-publisher "NoahBSakane" \
+	--iso-volume "BELZA-LIVE" \
+	--bootappend-live "boot=live components quiet locales=en_US.UTF-8 keyboard-layouts=jp timezone=Asia/Tokyo" \
+	"${@}"

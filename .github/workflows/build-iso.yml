@@ -1,0 +1,48 @@
+name: build-iso
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "auto/**"
+      - "config/**"
+      - ".github/workflows/build-iso.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Build the ISO in a Debian trixie container
+        run: |
+          docker run --rm --privileged --security-opt seccomp=unconfined \
+            -v "$PWD":/work -w /work debian:trixie bash -euxc '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                live-build debootstrap xorriso syslinux syslinux-common isolinux \
+                squashfs-tools ca-certificates git sudo dosfstools mtools cpio
+              ./auto/config
+              ./auto/build
+            '
+
+      - name: Checksums
+        run: |
+          ls -la *.iso
+          sha256sum *.iso | tee SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: belza-live-iso
+          path: |
+            *.iso
+            SHA256SUMS
+            build.log
+          retention-days: 30
