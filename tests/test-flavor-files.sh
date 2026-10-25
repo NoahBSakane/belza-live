@@ -77,8 +77,11 @@ check_clean() {
 }
 check_keys_hook() {
     # hook 自体は固定のパスを使い、試験用コピーだけを書き換える。
-    sed -e "s|/usr/share/icewm/keys|$WORK/default-keys|g" \
-        -e "s|/etc/skel/.icewm|$WORK/skel/.icewm|g" \
+    MOCK_KEYS_ROOT=$WORK
+    export MOCK_KEYS_ROOT
+    # shellcheck disable=SC2016
+    sed -e 's|/usr/share/icewm/keys|${MOCK_KEYS_ROOT}/default-keys|g' \
+        -e 's|/etc/skel/.icewm|${MOCK_KEYS_ROOT}/skel/.icewm|g' \
         "$keys_hook" > test-keys-hook.sh
     cat > default-keys <<'DEFAULTS'
 # 既定の全行を保持する。

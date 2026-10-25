@@ -83,17 +83,17 @@ EOF
 		cat > config/hooks/live/0200-icewm-keys.hook.chroot <<'EOF'
 #!/bin/sh
 set -e
-mkdir -p /etc/skel/.icewm
-if [ -f /usr/share/icewm/keys ]; then
-    cp /usr/share/icewm/keys /etc/skel/.icewm/keys
+mkdir -p "/etc/skel/.icewm"
+if [ -f "/usr/share/icewm/keys" ]; then
+    cp "/usr/share/icewm/keys" "/etc/skel/.icewm/keys"
 else
     printf '%s\n' 'WARNING: /usr/share/icewm/keys がないため、追加のキー割り当てだけを設定します。' >&2
-    : > /etc/skel/.icewm/keys
+    : > "/etc/skel/.icewm/keys"
 fi
 for binding in 'key "Ctrl+Alt+K" /usr/local/bin/kbd-toggle' \
     'key "Ctrl+Alt+J" /usr/local/bin/ime-on'; do
-    if ! grep -Fqx -- "$binding" /etc/skel/.icewm/keys; then
-        printf '%s\n' "$binding" >> /etc/skel/.icewm/keys
+    if ! grep -Fqx -- "$binding" "/etc/skel/.icewm/keys"; then
+        printf '%s\n' "$binding" >> "/etc/skel/.icewm/keys"
     fi
 done
 EOF

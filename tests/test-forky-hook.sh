@@ -14,7 +14,9 @@ PATH=$WORK/bin:$PATH
 export PATH
 cd "$WORK"
 sh auto/config
-sed -e "s|/etc/apt|$WORK/apt|g" -e "s|/var/lib/apt/lists|$WORK/lists|g" \
+# パス自体をシェルのソースへ埋め込まず、実行時に引用内で展開する。
+# shellcheck disable=SC2016
+sed -e 's|/etc/apt|${MOCK_ROOT}/apt|g' -e 's|/var/lib/apt/lists|${MOCK_ROOT}/lists|g' \
     config/hooks/live/0400-forky-clonezilla.hook.chroot > hook.sh
 cat > bin/apt-get <<'STUB'
 #!/bin/sh
