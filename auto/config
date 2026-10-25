@@ -11,8 +11,7 @@ set -e
 ARCH="${ARCH:-amd64}"
 FLAVOR="${FLAVOR:-cli}"
 rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chroot
-rm -f config/hooks/live/0100-no-modemmanager.hook.chroot \
-	config/hooks/live/0200-icewm-keys.hook.chroot
+rm -f config/hooks/live/0200-icewm-keys.hook.chroot
 rm -rf config/includes.chroot
 case "$FLAVOR" in
 	cli) ;;
@@ -39,12 +38,6 @@ EOF
 Type=Application
 Name=Fcitx 5
 Hidden=true
-EOF
-		cat > config/hooks/live/0100-no-modemmanager.hook.chroot <<'EOF'
-#!/bin/sh
-# 不在・削除失敗でもビルドを続ける。
-apt-get purge -y modemmanager || :
-apt-get autoremove -y || :
 EOF
 		cat > config/includes.chroot/usr/local/bin/kbd-toggle <<'EOF'
 #!/bin/sh
@@ -101,8 +94,7 @@ for binding in 'key "Ctrl+Alt+K" /usr/local/bin/kbd-toggle' \
     fi
 done
 EOF
-		chmod +x config/hooks/live/0100-no-modemmanager.hook.chroot \
-			config/hooks/live/0200-icewm-keys.hook.chroot \
+		chmod +x config/hooks/live/0200-icewm-keys.hook.chroot \
 			config/includes.chroot/usr/local/bin/kbd-toggle \
 			config/includes.chroot/usr/local/bin/ime-on
 		# 生成先のログイン時に変数を展開する。
@@ -115,6 +107,37 @@ EOF
 		;;
 	*) echo "unsupported FLAVOR: $FLAVOR" >&2; exit 1 ;;
 esac
+# ネットワーク関連の既定動作は全フレーバーで共通。
+mkdir -p config/hooks/live config/includes.chroot/usr/local/bin
+cat > config/hooks/live/0100-no-modemmanager.hook.chroot <<'EOF'
+#!/bin/sh
+# 不在・削除失敗でもビルドを続ける。
+apt-get purge -y modemmanager || :
+apt-get autoremove -y || :
+EOF
+cat > config/hooks/live/0300-ssh-off.hook.chroot <<'EOF'
+#!/bin/sh
+# 無効化に失敗してもビルドを続ける。手動で起動できるよう mask はしない。
+systemctl disable ssh.service || :
+if systemctl cat ssh.socket >/dev/null 2>&1; then
+    systemctl disable ssh.socket || :
+fi
+EOF
+cat > config/includes.chroot/usr/local/bin/ssh-on <<'EOF'
+#!/bin/sh
+set -e
+printf '%s\n' 'SSH を起動する。LAN から、user でログインできるようになる。先にパスワードを変更する'
+if [ "$(id -u)" = 0 ]; then
+    passwd user
+else
+    passwd
+fi
+sudo systemctl start ssh
+ip -brief address
+EOF
+chmod +x config/hooks/live/0100-no-modemmanager.hook.chroot \
+    config/hooks/live/0300-ssh-off.hook.chroot \
+    config/includes.chroot/usr/local/bin/ssh-on
 # includes.chroot はフレーバーを切り替えるたびに作り直す。安全モードは共通。
 mkdir -p config/includes.chroot/etc/initramfs-tools/scripts/init-top \
 	config/includes.chroot/etc/initramfs-tools/hooks
