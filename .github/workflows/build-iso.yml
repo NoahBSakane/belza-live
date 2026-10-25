@@ -15,10 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+          - { arch: amd64, flavor: cli,  runner: ubuntu-24.04 }
+          - { arch: amd64, flavor: lxqt, runner: ubuntu-24.04 }
+          - { arch: arm64, flavor: cli,  runner: ubuntu-24.04-arm }
+          - { arch: arm64, flavor: lxqt, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
@@ -32,7 +32,7 @@ jobs:
       - name: Build the ISO in a Debian trixie container
         run: |
           docker run --rm --privileged --security-opt seccomp=unconfined \
-            -e ARCH=${{ matrix.arch }} \
+            -e ARCH=${{ matrix.arch }} -e FLAVOR=${{ matrix.flavor }} \
             -v "$PWD":/work -w /work debian:trixie bash -euxc '
               apt-get update
               if [ "$ARCH" = amd64 ]; then
@@ -49,12 +49,13 @@ jobs:
 
       - name: Checksums
         run: |
+          mv live-image-${{ matrix.arch }}.hybrid.iso bootkit-linux-${{ matrix.arch }}-${{ matrix.flavor }}.iso
           ls -la *.iso
           sha256sum *.iso | tee SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bootkit-linux-iso-${{ matrix.arch }}
+          name: bootkit-linux-iso-${{ matrix.arch }}-${{ matrix.flavor }}
           path: |
             *.iso
             SHA256SUMS

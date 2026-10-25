@@ -33,3 +33,6 @@ tmux
 less
 vim-tiny
 restic
+clonezilla
+partclone
+partimage

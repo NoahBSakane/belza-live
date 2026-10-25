@@ -1,10 +1,21 @@
 #!/bin/sh
-# live-build の設定。Debian 13(trixie)。ARCH 環境変数で amd64(既定)か arm64 を選ぶ。
+# live-build の設定。Debian 13(trixie)。
+#   ARCH:   amd64(既定)か arm64
+#   FLAVOR: cli(既定。診断ツール + インストーラー)か lxqt(cli に、LXQt のデスクトップと Calamares を足したもの)
 #   amd64: syslinux(Legacy BIOS)と grub-efi(UEFI)の iso-hybrid
 #   arm64: grub-efi(UEFI)の iso-hybrid(arm64 の PC・仮想マシンは UEFI 起動)
 # Live(診断環境)と Debian Installer の両方の起動メニューを持つ。インストーラーは、既定では何も消さない(preseed なし)。
 set -e
 ARCH="${ARCH:-amd64}"
+FLAVOR="${FLAVOR:-cli}"
+case "$FLAVOR" in
+	cli) rm -f config/package-lists/lxqt.list.chroot ;;
+	lxqt)
+		mkdir -p config/package-lists
+		printf '%s\n' live-task-lxqt calamares calamares-settings-debian > config/package-lists/lxqt.list.chroot
+		;;
+	*) echo "unsupported FLAVOR: $FLAVOR" >&2; exit 1 ;;
+esac
 case "$ARCH" in
 	amd64) BOOTLOADERS="syslinux,grub-efi" ;;
 	arm64) BOOTLOADERS="grub-efi" ;;
@@ -26,6 +37,6 @@ lb config noauto \
 	--firmware-binary true \
 	--iso-application "bootkit-linux" \
 	--iso-publisher "NoahBSakane" \
-	--iso-volume "BOOTKIT-LINUX-$ARCH" \
+	--iso-volume "BOOTKIT-LINUX-$ARCH-$FLAVOR" \
 	--bootappend-live "boot=live components quiet locales=en_US.UTF-8 keyboard-layouts=jp timezone=Asia/Tokyo" \
 	"${@}"
