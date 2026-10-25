@@ -24,7 +24,7 @@ def check(condition, label):
     print('ok  ', label)
 
 
-with tempfile.TemporaryDirectory(prefix='qb-args-', dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='qb-args-') as temp:
     root = Path(temp)
     firmware = root / 'share/qemu'
     firmware.mkdir(parents=True)

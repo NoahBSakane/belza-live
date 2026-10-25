@@ -2,14 +2,14 @@
 # shellcheck shell=sh
 set -e
 [ "$#" -gt 0 ] || { echo 'forky package list is empty' >&2; exit 1; }
-source_file=/etc/apt/sources.list.d/forky.list
-pin_file=/etc/apt/preferences.d/forky.pref
+source_file="/etc/apt/sources.list.d/forky.list"
+pin_file="/etc/apt/preferences.d/forky.pref"
 cleanup() {
     status=$?
     trap - 0 HUP INT TERM
     # 一つ失敗しても残りの後始末を試し、失敗を成功に変えない。
     if rm -f "$source_file" "$pin_file"; then :; else status=1; fi
-    if rm -f /var/lib/apt/lists/*_dists_forky_* /var/lib/apt/lists/partial/*_dists_forky_*; then :; else status=1; fi
+    if rm -f "/var/lib/apt/lists/"*_dists_forky_* "/var/lib/apt/lists/partial/"*_dists_forky_*; then :; else status=1; fi
     if apt-get update -o APT::Get::List-Cleanup=true; then :; else status=1; fi
     if apt-get clean; then :; else status=1; fi
     exit "$status"
@@ -20,7 +20,7 @@ trap 'exit 1' HUP INT TERM
 protected='libc6 libc-bin libsystemd0 libudev1 systemd udev apt dpkg'
 # shellcheck disable=SC2086
 before=$(dpkg-query -W -f='${binary:Package} ${Version}\n' $protected)
-mkdir -p /etc/apt/sources.list.d /etc/apt/preferences.d
+mkdir -p "/etc/apt/sources.list.d" "/etc/apt/preferences.d"
 printf '%s\n' 'deb http://deb.debian.org/debian forky main' > "$source_file"
 {
     printf '%s\n' 'Package: *' 'Pin: release n=forky' 'Pin-Priority: 100' ''
