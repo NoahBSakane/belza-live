@@ -19,7 +19,11 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 
 Clonezilla と partclone は、trixie より新しい複製・復元ツールを使うため、forky から限定して入れる。Clonezilla 5.19.7・DRBL 5.11.15・partclone 0.3.49 と、追加で必要な `libntfs-3g91` だけを対象にし、それ以外は trixie のままにする。全フレーバー・amd64 / arm64 に共通で、Live の端末から `sudo clonezilla` で使える。
 
-対象は `config/forky-packages.txt` で管理し、APT の優先度で更新範囲を限定する。版は公開索引の更新に伴って変わるため、依存関係をビルド前に検査する。[確認した版・依存関係と検査方法](docs/forky-pins.md)を参照。
+対象は `config/forky-packages.txt` で一元管理する。全構成で、ビルド中の `0400-forky-clonezilla.hook.chroot` 内だけ forky の取得元と優先度を追加し、導入後は失敗時も取得元・pin・索引を除去する。導入した版と基盤パッケージの版の不変も検査する。
+
+live-build の `Check_package_available` は、同名パッケージの版が複数あると利用不可と判定する。そのため別スイートを常設すると、インストーラーの部品選択が壊れる。forky は APT の取得元に常設しない。
+
+版は公開索引の更新に伴って変わるため、依存関係をビルド前に検査する。[確認した版・依存関係と検査方法](docs/forky-pins.md)を参照。
 
 ## 調査スクリプト
 

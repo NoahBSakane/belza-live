@@ -37,22 +37,24 @@ forky の `partclone`・`clonezilla`・`drbl` の Depends / Pre-Depends をた�
 
 trixie の索引で確認した live-build は `1:20250505+deb13u1`。その [Debian パッケージ](https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb)を curl で取得し、ar と tar で展開して実装を読んだ。
 
-- `usr/share/live/build/functions/packagelists.sh` の `Expand_packagelist` は通常のパッケージ行をそのまま出力する。
-- `usr/lib/live/build/chroot_package-lists` は展開結果を `/root/packages.chroot` に追記する。
-- `usr/lib/live/build/chroot_install-packages` は `xargs --arg-file=/root/packages.chroot apt-get ... install` で渡す。したがって `clonezilla/forky`・`partclone/forky` がそのまま APT のリリース指定になる。追加のインストール hook は不要。
-- `usr/lib/live/build/chroot_archives` は `.list.chroot` を `sources.list.d` に、`.pref.chroot` を `preferences.d` に配置してからパッケージを入れる。chroot 専用のこれらのファイルは binary 段階で除去するため、完成した Live の通常更新用ソースには残さない。
+`usr/share/live/build/functions/packages.sh` の `Check_package_available` は、`apt-cache show "^<pkg>$"` の `Package:` 行がちょうど 1 行の場合だけ利用可能と判定する。trixie と forky を常設すると、同名の複数版が 2 行になり、インストーラーの部品選択が壊れる。amd64 では `libfuse3-4` の代わりに存在しない `libfuse3-3` を選んで失敗し、arm64 の GRUB 部品も判定から外れるおそれがある。
 
-`auto/config` が全フレーバー・全アーキテクチャ共通で `config/archives/forky.list.chroot` と `forky.pref.chroot` を毎回生成する。forky の既定優先度は 100、`config/forky-packages.txt` の限定リストだけ 990。trixie の既定 500 が、ほかのパッケージでは優先される。`libc6`・`systemd`・`udev`・`apt`・`dpkg` は限定リストに含めない。`-t forky` による全体のターゲットリリース変更は行わない。
+そのため `config/archives/` に forky を置かず、通常のパッケージ一覧では `clonezilla`・`partclone` を trixie から入れる。`auto/config` は全フレーバー・全アーキテクチャで `config/hooks/live/0400-forky-clonezilla.hook.chroot` を生成する。対象名は `config/forky-packages.txt` だけで管理し、hook の処理本体は `auto/forky-hook.sh` に置く。
+
+hook 内だけで forky の取得元と pin を追加する。既定優先度は 100、限定リストだけ 990 とし、`apt-get update` の後に `apt-get install -y -t forky` に一覧の名前を渡す。導入後は、各パッケージの dpkg の版が `apt-cache policy` の forky の版と一致することを検査する。`-t` による依存先への波及も検出するため、`libc6`・`libc-bin`・`libsystemd0`・`libudev1`・`systemd`・`udev`・`apt`・`dpkg` の導入前後の版が同一であることを確認し、違えばビルドを止める。
+
+終了時の trap は、成功・失敗のどちらでも取得元・pin・forky の索引を削除し、`apt-get update` と `apt-get clean` を実行する。後始末が失敗した場合もビルドを失敗させる。hook 終了後は forky を APT の取得元に残さない。
 
 ## 再検査
 
 ```sh
 sh tests/check-package-lists.sh
 sh tests/test-flavor-files.sh
+sh tests/test-forky-hook.sh
 python3 -B tests/test-forky-deps.py
 ```
 
-公開索引は更新されるため、版の固定ではなく対象名の限定である。検査は現在の公開索引で行い、取得不能時の終了コードは 77。索引を再利用する場合は `sh tests/check-package-lists.sh CACHE_DIR`。新しいディレクトリを指定すると索引を更新する。フレーバーの検査は、全 6 構成の生成結果と、共通の pin 100 / 限定 pin 990、基盤パッケージの trixie 優先を検査する。
+公開索引は更新されるため、版の固定ではなく対象名の限定である。検査は現在の公開索引で行い、取得不能時の終了コードは 77。索引を再利用する場合は `sh tests/check-package-lists.sh CACHE_DIR`。新しいディレクトリを指定すると索引を更新する。フレーバーの検査は全 6 構成の hook 生成と構文、別スイートの常設禁止を検査する。hook の試験では偽の APT を使い、pin 100 / 990、正常更新、更新なし、基盤の版の変更、取得・導入・照合・後始末の失敗を区別し、いずれでも取得元・pin・索引の削除と clean の実行を検査する。
 
 ## 索引の出典
 

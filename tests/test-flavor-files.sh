@@ -138,27 +138,41 @@ MOCK_SSH_LOG=$WORK/ssh.log
 MOCK_UID=1000 MOCK_PASSWD_STATUS=0 MOCK_SOCKET_STATUS=0 MOCK_SYSTEMCTL_STATUS=0
 export MOCK_SSH_LOG MOCK_UID MOCK_PASSWD_STATUS MOCK_SOCKET_STATUS MOCK_SYSTEMCTL_STATUS
 check_forky() {
-    contains config/archives/forky.list.chroot 'deb http://deb.debian.org/debian forky main'
     python3 - <<'PYTHON'
 from pathlib import Path
-allowed = set(Path('config/forky-packages.txt').read_text().split())
-assert {'clonezilla', 'drbl', 'partclone'} <= allowed
-assert not allowed & {'libc6', 'libc-bin', 'libsystemd0', 'libudev1', 'systemd', 'udev', 'apt', 'dpkg'}
-records = []
-for block in Path('config/archives/forky.pref.chroot').read_text().strip().split('\n\n'):
-    record = dict(line.split(': ', 1) for line in block.splitlines())
-    assert set(record) == {'Package', 'Pin', 'Pin-Priority'}
-    assert record['Pin'] == 'release n=forky'
-    records.append(record)
-assert len(records) == len(allowed) + 1
-assert {r['Package'] for r in records} == allowed | {'*'}
-for record in records:
-    assert record['Pin-Priority'] == ('100' if record['Package'] == '*' else '990')
-# trixie の既定 500 と比較。基盤は forky を候補にしない。
-for name in ('libc6', 'systemd', 'udev', 'apt', 'dpkg'):
-    priority = max(int(r['Pin-Priority']) for r in records if r['Package'] in ('*', name))
-    assert priority < 500, (name, priority)
+import re
+allowed = [line for line in Path('config/forky-packages.txt').read_text().splitlines()
+           if line and not line.startswith('#')]
+assert {'clonezilla', 'drbl', 'partclone'} <= set(allowed)
+assert not set(allowed) & {'libc6', 'libc-bin', 'libsystemd0', 'libudev1', 'systemd', 'udev', 'apt', 'dpkg'}
+for path in Path('config/archives').glob('*.list.chroot'):
+    for line in path.read_text().splitlines():
+        if not re.match(r'^\s*deb\s+', line):
+            continue
+        fields = re.sub(r'\[[^]]*\]', '', line).split()
+        assert len(fields) >= 3 and fields[2] in {
+            'trixie', 'trixie-updates', 'trixie-security', 'stable'
+        }, (f'{path}: live-build の Check_package_available が壊れる'
+            '(Debian の別スイートを、取得元に常設しない)')
+assert not list(Path('config/archives').glob('*forky*')), 'forky の archives が残っている'
+hook = Path('config/hooks/live/0400-forky-clonezilla.hook.chroot').read_text()
+assert 'set -- ' + ' '.join(allowed) + '\n' in hook
+for expected in ('set -e', 'trap cleanup 0', "trap 'exit 1' HUP INT TERM",
+                 'rm -f "$source_file" "$pin_file"',
+                 "'Package: *' 'Pin: release n=forky' 'Pin-Priority: 100'",
+                 'Pin-Priority: 990', 'apt-get install -y -t forky "$@"',
+                 'before=$(dpkg-query', 'after=$(dpkg-query',
+                 'if [ "$before" != "$after" ]; then',
+                 "protected='libc6 libc-bin libsystemd0 libudev1 systemd udev apt dpkg'"):
+    assert expected in hook, f'hook に {expected} がない'
+assert '|| :' not in hook
 PYTHON
+    forky_hook=config/hooks/live/0400-forky-clonezilla.hook.chroot
+    [ -x "$forky_hook" ] || fail 'forky hook が実行可能でない'
+    sh -n "$forky_hook"
+    if command -v shellcheck >/dev/null 2>&1; then
+        shellcheck -s sh "$forky_hook"
+    fi
 }
 check_common() {
     check_forky
@@ -264,7 +278,7 @@ cmp expected-apt "$MOCK_APT_LOG"
 check_clean cli
 check_icewm
 check_clean lxqt
-# 全アーキテクチャ・全フレーバーで共通のアーカイブと pin を維持する。
+# 全アーキテクチャ・全フレーバーで一時導入 hook を生成する。
 for arch in amd64 arm64; do
     for flavor in cli lxqt icewm; do
         ARCH=$arch run_config "$flavor"
