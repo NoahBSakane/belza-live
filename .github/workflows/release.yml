@@ -1,0 +1,119 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 公開する既存タグ
+        required: true
+        type: string
+      dry_run:
+        description: ファイル一覧だけを確認し、Release を作らない
+        type: boolean
+        default: true
+      prerelease:
+        description: プレリリースとして公開する
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.tag.outputs.commit }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: tag
+        name: Resolve the existing tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git check-ref-format "refs/tags/$TAG"
+          commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          printf 'commit=%s\ntag=%s\n' "$commit" "$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    uses: ./.github/workflows/build-iso.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
+
+  release:
+    needs: [resolve, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      BUILD_COMMIT: ${{ needs.resolve.outputs.commit }}
+      BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      PRERELEASE: ${{ github.event_name == 'push' || inputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space for all ISO artifacts and split files
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Refuse an existing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GH_REPO/releases" --jq '.[].tag_name' > existing-tags.txt
+          if grep -Fxq -- "$TAG" existing-tags.txt; then
+            echo "Release already exists: $TAG" >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bootkit-linux-iso-*
+          path: artifacts
+      - name: Prepare release assets and notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            for flavor in cli lxqt icewm; do
+              test -f "artifacts/bootkit-linux-iso-$arch-$flavor/bootkit-linux-$arch-$flavor.iso"
+            done
+          done
+          sh scripts/release-assets.sh artifacts release-assets "$BUILD_COMMIT" "$BUILD_RUN_URL" release-notes.md
+      - name: Show planned attachments and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in release-assets/*; do
+            printf '%s\t%s bytes\t' "${file##*/}" "$(wc -c < "$file")"
+            sha256sum "$file" | cut -d ' ' -f 1
+          done
+          cat release-notes.md
+          if [ "$DRY_RUN" = true ]; then
+            echo 'Dry run: Release は作成しません。'
+            exit 0
+          fi
+          # A moved tag must never publish assets from a different commit.
+          git fetch --no-tags origin "refs/tags/$TAG"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$BUILD_COMMIT"
+          set --
+          if [ "$PRERELEASE" = true ]; then set -- --prerelease; fi
+          gh release create --verify-tag --title "$TAG" \
+            --notes-file release-notes.md "$@" -- "$TAG" release-assets/*

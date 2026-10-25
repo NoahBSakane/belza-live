@@ -25,6 +25,22 @@ GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)
 
 手元で作る場合は、Debian 13 の amd64 の環境(仮想マシンやコンテナ)で、`live-build`・`debootstrap`・`xorriso`・`syslinux` などを入れ、`./auto/config && ./auto/build` を実行する。ビルド領域に約 13GB が要る。
 
+## リリース
+
+`v*` タグを push すると、そのタグのコミットから amd64・arm64 の各フレーバーをビルドし、GitHub Release に公開する。タグの push ではプレリリースとして公開する。同じタグの Release が既にあれば失敗し、上書きしない。
+
+手動の場合は Actions の `release` で、既存タグを `tag` に指定する。`dry_run` は既定で true で、公開予定の添付ファイル名・サイズ・SHA-256 と本文をログへ表示し、Release は作らない。公開する場合は `dry_run` を false にし、正式リリースにする場合は `prerelease` も false にする(既定は true)。
+
+2 GiB (2147483648 バイト)を超える ISO は、最大 1900 MiB の `bootkit-linux-<arch>-<flavor>.iso.part00`、`part01` などに分割する。必要な ISO の全 part ファイルと `SHA256SUMS`・`SHA256SUMS.parts` を同じディレクトリへ保存し、次の順で検証・結合する。`<名前>` は `bootkit-linux-amd64-lxqt` などに置き換える。
+
+```sh
+sha256sum --ignore-missing -c SHA256SUMS.parts
+cat <名前>.iso.part* > <名前>.iso
+sha256sum --ignore-missing -c SHA256SUMS
+```
+
+`SHA256SUMS` は完全な ISO、`SHA256SUMS.parts` は各 part ファイルのチェックサム。使う ISO と全 part ファイルが検証結果で `OK` になることを確かめる。上限以下の ISO は分割されず、`SHA256SUMS` でそのまま検証できる。macOS では `shasum -a 256 -c` を使い、必要なファイルの行だけをチェックサム一覧から選ぶ。Release 本文にはビルドしたコミットと `build-iso` の実行へのリンクも載せる。
+
 ## 既知の注意
 
 - `--memtest` は、Debian の `live-build` の不具合(#1122654。memtest86+ 8.x でファイル名が変わった)のため、いまは `none` にしている。必要なら、バイナリを `config/includes.binary` に置く。
