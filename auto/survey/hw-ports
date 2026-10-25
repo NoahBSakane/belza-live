@@ -1,0 +1,24 @@
+#!/bin/sh
+# shellcheck source=auto/survey/hw-common.sh
+. "$(dirname "$0")/hw-common.sh"
+if command -v lspci >/dev/null 2>&1; then
+    lspci -nn 2>&1 | grep -Ei 'SATA|AHCI|IDE|USB|Ethernet|CardBus|PCMCIA|FireWire' || :
+else missing lspci; fi
+if command -v lsusb >/dev/null 2>&1; then lsusb -t 2>&1; else missing lsusb; fi
+if command -v dmesg >/dev/null 2>&1; then
+    if messages=$(dmesg 2>&1); then printf '%s\n' "$messages" | grep -Ei 'ata|sata|link up|link down|usb|expresscard|pcieport' | tail -n 60
+    else printf '未取得: dmesg (%s)\n' "$messages"; fi
+else missing dmesg; fi
+command -v ethtool >/dev/null 2>&1 || missing ethtool
+for nic in "$HW_SYSFS"/class/net/*; do
+    [ -e "$nic" ] || continue
+    name=${nic##*/}; [ "$name" != lo ] || continue
+    link=$(read_value "$nic/operstate"); speed=$(read_value "$nic/speed"); duplex=$(read_value "$nic/duplex")
+    if command -v ethtool >/dev/null 2>&1; then
+        info=$(ethtool "$name" 2>/dev/null) || :
+        v=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Link detected: *//p'); [ -z "$v" ] || link=$v
+        v=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Speed: *//p'); [ -z "$v" ] || speed=$v
+        v=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Duplex: *//p'); [ -z "$v" ] || duplex=$v
+    fi
+    printf 'NIC %s: リンク=%s 速度=%s duplex=%s\n' "$name" "$link" "$speed" "$duplex"
+done

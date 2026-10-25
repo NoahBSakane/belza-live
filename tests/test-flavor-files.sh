@@ -138,6 +138,12 @@ MOCK_SSH_LOG=$WORK/ssh.log
 MOCK_UID=1000 MOCK_PASSWD_STATUS=0 MOCK_SOCKET_STATUS=0 MOCK_SYSTEMCTL_STATUS=0
 export MOCK_SSH_LOG MOCK_UID MOCK_PASSWD_STATUS MOCK_SOCKET_STATUS MOCK_SYSTEMCTL_STATUS
 check_common() {
+    for source in auto/survey/*; do
+        installed=config/includes.chroot/usr/local/bin/${source##*/}
+        [ -x "$installed" ] || fail "$installed が実行可能でない"
+        cmp "$source" "$installed"
+        sh -n "$installed"
+    done
     for file in "$hook" "$ssh_hook" "$ssh_on"; do
         [ -x "$file" ] || fail "$file が実行可能でない"
         sh -n "$file"
