@@ -33,8 +33,8 @@ tmux
 less
 vim-tiny
 restic
-clonezilla
-partclone
+clonezilla/forky
+partclone/forky
 partimage
 
 # 起動修復・複製・転送

@@ -137,7 +137,31 @@ chmod +x bin/id bin/passwd bin/sudo bin/systemctl bin/ip
 MOCK_SSH_LOG=$WORK/ssh.log
 MOCK_UID=1000 MOCK_PASSWD_STATUS=0 MOCK_SOCKET_STATUS=0 MOCK_SYSTEMCTL_STATUS=0
 export MOCK_SSH_LOG MOCK_UID MOCK_PASSWD_STATUS MOCK_SOCKET_STATUS MOCK_SYSTEMCTL_STATUS
+check_forky() {
+    contains config/archives/forky.list.chroot 'deb http://deb.debian.org/debian forky main'
+    python3 - <<'PYTHON'
+from pathlib import Path
+allowed = set(Path('config/forky-packages.txt').read_text().split())
+assert {'clonezilla', 'drbl', 'partclone'} <= allowed
+assert not allowed & {'libc6', 'libc-bin', 'libsystemd0', 'libudev1', 'systemd', 'udev', 'apt', 'dpkg'}
+records = []
+for block in Path('config/archives/forky.pref.chroot').read_text().strip().split('\n\n'):
+    record = dict(line.split(': ', 1) for line in block.splitlines())
+    assert set(record) == {'Package', 'Pin', 'Pin-Priority'}
+    assert record['Pin'] == 'release n=forky'
+    records.append(record)
+assert len(records) == len(allowed) + 1
+assert {r['Package'] for r in records} == allowed | {'*'}
+for record in records:
+    assert record['Pin-Priority'] == ('100' if record['Package'] == '*' else '990')
+# trixie の既定 500 と比較。基盤は forky を候補にしない。
+for name in ('libc6', 'systemd', 'udev', 'apt', 'dpkg'):
+    priority = max(int(r['Pin-Priority']) for r in records if r['Package'] in ('*', name))
+    assert priority < 500, (name, priority)
+PYTHON
+}
 check_common() {
+    check_forky
     for file in "$hook" "$ssh_hook" "$ssh_on"; do
         [ -x "$file" ] || fail "$file が実行可能でない"
         sh -n "$file"
@@ -234,4 +258,11 @@ cmp expected-apt "$MOCK_APT_LOG"
 check_clean cli
 check_icewm
 check_clean lxqt
+# 全アーキテクチャ・全フレーバーで共通のアーカイブと pin を維持する。
+for arch in amd64 arm64; do
+    for flavor in cli lxqt icewm; do
+        ARCH=$arch run_config "$flavor"
+        check_forky
+    done
+done
 printf '%s\n' 'ALL PASS: 全フレーバーの共通 hook・SSH、icewm の生成・動作、icewm → cli / lxqt の削除'
