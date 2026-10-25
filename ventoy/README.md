@@ -39,6 +39,23 @@ python3 -I ventoy/merge-ventoy-json.py /Volumes/VENTOY/ventoy/ventoy.json ./vent
 
 生成した JSON とファイル群を最終コピーする。`control` など既存の設定と、別 ISO の項目は保つ。同じ Ubuntu ISO の `persistence`・`conf_replace`・`auto_install`・`menu_alias` の項目は置き換え、重複を除く。再実行しても結果は同じ。同一ファイル・同一実体への直接書き込みは `--in-place` がなければ拒否する。`--dry-run` は標準出力に表示するだけ。
 
+## Ventoy の更新(Mac、MBR のディスク)
+
+Ventoy の更新ツールは Windows と Linux 用で、Mac 用はない。MBR のディスクで、Ventoy 1.1.18 の `tool/VentoyWorker.sh` の更新(Update)と同じバイト操作を再現するスクリプトを `ventoy/update-ventoy-mbr.py` に置く。第 1 パーティション(ISO などのデータ)には触れない。
+
+```sh
+# 展開した配布物(ventoy-1.1.18/)を指定する。--apply が無いと、検査と退避の計画だけを表示する。
+sudo python3 -I ventoy/update-ventoy-mbr.py --ventoy-dir ./ventoy-1.1.18 /dev/rdisk4
+sudo python3 -I ventoy/update-ventoy-mbr.py --ventoy-dir ./ventoy-1.1.18 --backup-dir ./backup --apply /dev/rdisk4
+```
+
+- 対象は、MBR で、第 2 パーティションが Ventoy の形(タイプ 0xEF、65536 セクタ、ラベル VTOYEFI)で、セキュアブート版(`/EFI/BOOT/grubx64_real.efi` がある)のディスクに限る。GPT・セキュアブート版でないもの・第 3 以降のパーティションがあるものは拒否する。非セキュアブート版は、本物が呼ぶ `vtoycli partresize -s` を再現していないため扱わない。
+- 書き込み前に、先頭 1MiB と第 2 パーティションを `--backup-dir` へ退避し、書き込み後に全領域を読み戻して照合する。書き込みは 512 バイト境界に揃えてある(`/dev/rdisk` は端数の書き込みができない)。
+- Mac のデバイスへの書き込みは root が要る。先に `diskutil unmountDisk diskN` でマウントを外す。
+- 検証(2026-10-26): Alpine Linux 上の本物の `Ventoy2Disk.sh -I` で作った 2GiB の仮ディスクに、起動コード・コア領域を壊した状態を作り、本物の `-u` とこのスクリプトを同じ入力で実行して比較した。active フラグの入れ替えがある場合とない場合の両方で、先頭 1MiB と第 2 パーティションの先頭 64,883 セクタが完全に一致した。第 2 パーティションの末尾は、Alpine の busybox `dd` が書き漏らして本物の方が欠けた(約 647 セクタ)。Alpine などの busybox 環境では本物の更新スクリプトを使わない。
+- 実機の USB(1TB)での実行は、この記録の時点では未実施。
+- Apple 仮想化(UTM の Apple バックエンド)の VM に USB の NVMe ケース(SuperSpeed Plus)を渡すと、`can't set config #1, error -32` で認識できなかった。VM 経由の更新はできない。
+
 ## Live 起動
 
 Ventoy で ISO を選ぶと、自動インストールのテンプレート選択と persistence 選択を経て、ISO 内の GRUB 起動メニューに進む。persistence の選択画面は ISO 内のメニューより前に出る。Ventoy 側で選択が省略される場合もあるため、保存領域を使う設定で起動したことを確認する。テンプレートの既定は「なし」(`autosel: 0`、待ち時間 15 秒)で、通常の Live 起動を選ぶ。
