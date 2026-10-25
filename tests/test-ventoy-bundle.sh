@@ -150,8 +150,13 @@ for directory in ['usr/share/xsessions', 'usr/share/wayland-sessions', 'etc',
 (root / 'bin/getent').write_text('#!/bin/sh\nexit 0\n')
 (root / 'bin/getent').chmod(0o755)
 selector = (bundle / 'ubuntu/bootkit-session.sh').read_text()
+# The script text is edited by string replacement, so point it at a symlink whose path has no spaces.
+import tempfile
+root_link_dir = Path(tempfile.mkdtemp(prefix='bootkit-root.'))
+root_link = root_link_dir / 'r'
+root_link.symlink_to(root)
 for prefix in ['/etc/', '/var/lib/', '/proc/', '/usr/share/']:
-    selector = selector.replace(prefix, str(root) + prefix)
+    selector = selector.replace(prefix, str(root_link) + prefix)
 runner = work / 'session.sh'
 runner.write_text(selector)
 env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'])
@@ -168,6 +173,8 @@ for argument, expected in [('bootkit.session=lubuntu', 'lubuntu'),
 (root / 'usr/share/wayland-sessions/ubuntu.desktop').unlink()
 result = subprocess.run(['sh', str(runner)], env=env, capture_output=True)
 require(result.returncode != 0, 'セッション欠落を見逃した')
+root_link.unlink()
+root_link_dir.rmdir()
 print('PASS: セッション切替・既存設定保持・欠落時エラー (偽 root)')
 
 result = subprocess.run(['sh', str(bundle / 'make-persistence.sh'), '/Volumes/BOOTKIT-NOT-A-REAL-DISK/no.dat'], capture_output=True)
