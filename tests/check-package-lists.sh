@@ -67,10 +67,6 @@ for arch in amd64 arm64; do
         xz -dc "$CACHE_DIR/trixie-$area-$arch-Packages.xz" > "$WORK/Packages"
         awk '$1 == "Package:" { print $2 }' "$WORK/Packages" >> "$WORK/$arch.packages"
     done
-    xz -dc "$CACHE_DIR/forky-main-$arch-Packages.xz" > "$WORK/Packages"
-    awk 'FILENAME == ARGV[1] { allowed[$1] = 1; next }
-        $1 == "Package:" && ($2 in allowed) { print $2 "/forky" }' \
-        "$HERE/config/forky-packages.txt" "$WORK/Packages" >> "$WORK/$arch.packages"
 done
 
 mkdir -p "$WORK/bin" "$WORK/build"
