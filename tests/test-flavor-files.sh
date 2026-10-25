@@ -1,5 +1,5 @@
 #!/bin/sh
-# lb のみをスタブにして、フレーバーの生成・切り替えを検査する。
+# 外部コマンドをスタブにして、フレーバーの生成・切り替えと補助コマンドを検査する。
 set -eu
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-$HERE}/test-flavor-files.XXXXXX")
@@ -22,6 +22,8 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 contains() { grep -Fqx -- "$2" "$1" || fail "$1: $2 がない"; }
 run_config() { FLAVOR=$1 sh auto/config > lb.log; }
 hook=config/hooks/live/0100-no-modemmanager.hook.chroot
+ssh_hook=config/hooks/live/0300-ssh-off.hook.chroot
+ssh_on=config/includes.chroot/usr/local/bin/ssh-on
 keys_hook=config/hooks/live/0200-icewm-keys.hook.chroot
 kbd=config/includes.chroot/usr/local/bin/kbd-toggle
 ime=config/includes.chroot/usr/local/bin/ime-on
@@ -29,6 +31,7 @@ keys=config/includes.chroot/etc/skel/.icewm/keys
 packages=config/package-lists/icewm.list.chroot
 check_icewm() {
     run_config icewm
+    check_common
     for file in "$hook" "$keys_hook" "$kbd" "$ime"; do
         [ -x "$file" ] || fail "$file が実行可能でない"
         sh -n "$file"
@@ -58,11 +61,11 @@ check_icewm() {
 }
 check_clean() {
     run_config "$1"
-    for file in "$hook" "$keys_hook" "$kbd" "$ime" "$keys" "$packages"; do
+    check_common
+    for file in "$keys_hook" "$kbd" "$ime" "$keys" "$packages"; do
         [ ! -e "$file" ] || fail "$1 への切り替え後に $file が残った"
     done
     [ ! -e config/includes.chroot/etc/skel ] || fail "$1 に icewm の設定が残った"
-    [ ! -e config/includes.chroot/usr/local/bin ] || fail "$1 に icewm のコマンドが残った"
     [ -x config/includes.chroot/etc/initramfs-tools/scripts/init-top/bootkit-safe ] || fail "$1 に共通の安全モードがない"
     case "$1" in
         cli) [ ! -e config/package-lists/lxqt.list.chroot ] || fail 'cli に LXQt が残った' ;;
@@ -100,6 +103,88 @@ DEFAULTS
     [ -s keys-warning.log ] || fail '既定の keys がないときの警告がない'
     sh test-keys-hook.sh 2> keys-warning.log
     cmp extra-keys skel/.icewm/keys
+}
+# SSH の起動は本物のサービスやパスワードに触れずに検査する。
+cat > bin/id <<'STUB'
+#!/bin/sh
+[ "$*" = -u ] || exit 1
+printf '%s\n' "$MOCK_UID"
+STUB
+cat > bin/passwd <<'STUB'
+#!/bin/sh
+printf 'passwd%s\n' "${*:+ $*}" >> "$MOCK_SSH_LOG"
+exit "$MOCK_PASSWD_STATUS"
+STUB
+cat > bin/sudo <<'STUB'
+#!/bin/sh
+printf 'sudo %s\n' "$*" >> "$MOCK_SSH_LOG"
+exec "$@"
+STUB
+cat > bin/systemctl <<'STUB'
+#!/bin/sh
+printf 'systemctl %s\n' "$*" >> "$MOCK_SSH_LOG"
+if [ "$*" = 'cat ssh.socket' ]; then
+    exit "$MOCK_SOCKET_STATUS"
+fi
+exit "$MOCK_SYSTEMCTL_STATUS"
+STUB
+cat > bin/ip <<'STUB'
+#!/bin/sh
+printf 'ip %s\n' "$*" >> "$MOCK_SSH_LOG"
+printf '%s\n' 'eth0 UP 192.0.2.1/24'
+STUB
+chmod +x bin/id bin/passwd bin/sudo bin/systemctl bin/ip
+MOCK_SSH_LOG=$WORK/ssh.log
+MOCK_UID=1000 MOCK_PASSWD_STATUS=0 MOCK_SOCKET_STATUS=0 MOCK_SYSTEMCTL_STATUS=0
+export MOCK_SSH_LOG MOCK_UID MOCK_PASSWD_STATUS MOCK_SOCKET_STATUS MOCK_SYSTEMCTL_STATUS
+check_common() {
+    for file in "$hook" "$ssh_hook" "$ssh_on"; do
+        [ -x "$file" ] || fail "$file が実行可能でない"
+        sh -n "$file"
+    done
+    if command -v shellcheck >/dev/null 2>&1; then
+        shellcheck -s sh "$hook" "$ssh_hook" "$ssh_on"
+    fi
+    contains "$hook" 'apt-get purge -y modemmanager || :'
+    contains "$hook" 'apt-get autoremove -y || :'
+    # socket の有無と disable 失敗の許容を別々に確認する。
+    for MOCK_SOCKET_STATUS in 0 1; do
+        for MOCK_SYSTEMCTL_STATUS in 0 1; do
+            : > "$MOCK_SSH_LOG"
+            sh "$ssh_hook"
+            printf '%s\n' 'systemctl disable ssh.service' 'systemctl cat ssh.socket' > expected-ssh
+            if [ "$MOCK_SOCKET_STATUS" = 0 ]; then
+                printf '%s\n' 'systemctl disable ssh.socket' >> expected-ssh
+            fi
+            cmp expected-ssh "$MOCK_SSH_LOG"
+        done
+    done
+    MOCK_SYSTEMCTL_STATUS=0
+    for MOCK_UID in 1000 0; do
+        if [ "$MOCK_UID" = 0 ]; then
+            passwd_command='passwd user'
+        else
+            passwd_command=passwd
+        fi
+        for MOCK_PASSWD_STATUS in 0 1; do
+            : > "$MOCK_SSH_LOG"
+            # 案内も同じログで比較し、passwd より先に表示することを確かめる。
+            if sh "$ssh_on" >> "$MOCK_SSH_LOG"; then
+                [ "$MOCK_PASSWD_STATUS" = 0 ] || fail 'passwd 失敗でも ssh-on が成功した'
+            else
+                [ "$MOCK_PASSWD_STATUS" != 0 ] || fail 'ssh-on の起動が失敗した'
+            fi
+            printf '%s\n' \
+                'SSH を起動する。LAN から、user でログインできるようになる。先にパスワードを変更する' \
+                "$passwd_command" > expected-ssh
+            if [ "$MOCK_PASSWD_STATUS" = 0 ]; then
+                printf '%s\n' 'sudo systemctl start ssh' 'systemctl start ssh' \
+                    'ip -brief address' 'eth0 UP 192.0.2.1/24' >> expected-ssh
+            fi
+            cmp expected-ssh "$MOCK_SSH_LOG"
+        done
+    done
+    MOCK_PASSWD_STATUS=0
 }
 sh -n auto/config
 check_icewm
@@ -149,4 +234,4 @@ cmp expected-apt "$MOCK_APT_LOG"
 check_clean cli
 check_icewm
 check_clean lxqt
-printf '%s\n' 'ALL PASS: icewm の生成・動作、icewm → cli / lxqt の削除'
+printf '%s\n' 'ALL PASS: 全フレーバーの共通 hook・SSH、icewm の生成・動作、icewm → cli / lxqt の削除'
