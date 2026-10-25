@@ -17,8 +17,10 @@ jobs:
         include:
           - { arch: amd64, flavor: cli,  runner: ubuntu-24.04 }
           - { arch: amd64, flavor: lxqt, runner: ubuntu-24.04 }
+          - { arch: amd64, flavor: icewm, runner: ubuntu-24.04 }
           - { arch: arm64, flavor: cli,  runner: ubuntu-24.04-arm }
           - { arch: arm64, flavor: lxqt, runner: ubuntu-24.04-arm }
+          - { arch: arm64, flavor: icewm, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:

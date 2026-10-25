@@ -1,18 +1,34 @@
 #!/bin/sh
 # live-build の設定。Debian 13(trixie)。
 #   ARCH:   amd64(既定)か arm64
-#   FLAVOR: cli(既定。診断ツール + インストーラー)か lxqt(cli に、LXQt のデスクトップと Calamares を足したもの)
+#   FLAVOR: cli(既定。診断ツール + インストーラー)
+#           lxqt(cli に、LXQt のデスクトップと Calamares を足したもの)
+#           icewm(cli に、軽量な IceWM のデスクトップを足したもの。tty1 で自動ログイン後に X を起動。起動オプション nox で CLI のまま)
 #   amd64: syslinux(Legacy BIOS)と grub-efi(UEFI)の iso-hybrid
 #   arm64: grub-efi(UEFI)の iso-hybrid(arm64 の PC・仮想マシンは UEFI 起動)
 # Live(診断環境)と Debian Installer の両方の起動メニューを持つ。インストーラーは、既定では何も消さない(preseed なし)。
 set -e
 ARCH="${ARCH:-amd64}"
 FLAVOR="${FLAVOR:-cli}"
+rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chroot
+rm -rf config/includes.chroot
 case "$FLAVOR" in
-	cli) rm -f config/package-lists/lxqt.list.chroot ;;
+	cli) ;;
 	lxqt)
 		mkdir -p config/package-lists
 		printf '%s\n' live-task-lxqt calamares calamares-settings-debian > config/package-lists/lxqt.list.chroot
+		;;
+	icewm)
+		mkdir -p config/package-lists config/includes.chroot/etc/skel
+		printf '%s\n' xserver-xorg-core xserver-xorg-input-libinput xserver-xorg-video-all xinit \
+			icewm pcmanfm lxterminal network-manager wpasupplicant fonts-noto-cjk xdg-utils \
+			> config/package-lists/icewm.list.chroot
+		printf '%s\n' 'exec icewm-session' > config/includes.chroot/etc/skel/.xinitrc
+		printf '%s\n' \
+			'[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"' \
+			'# tty1 の自動ログイン後に X を起動する。起動オプションに nox があるときは、CLI のまま(あとで startx で起動できる)。' \
+			'if [ -z "$DISPLAY" ] && [ "$(tty)" = /dev/tty1 ] && ! grep -qw nox /proc/cmdline; then exec startx; fi' \
+			> config/includes.chroot/etc/skel/.bash_profile
 		;;
 	*) echo "unsupported FLAVOR: $FLAVOR" >&2; exit 1 ;;
 esac

@@ -11,6 +11,14 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 - ディスクを無人で構成する例(md RAID1 の 3 台ミラー + BIOS boot + データ用の区画)は `examples/` にある。**対象のディスクを、すべて消す**ので、内容を読み、実際の構成に合わせて、明示的に使うこと。
 - 安全装置 `disk-guard.sh`(ISO の `/cdrom/disk-guard.sh`)は、消す前に、対象のディスクが想定どおり(USB でない・取り外し可能でない・容量が範囲内・型番が合う)かを確かめ、1 つでも違えば、何も消さずに終わる。試験は `tests/test-disk-guard.sh`(条件を外した版で失敗することも確認済み)。
 
+## フレーバー
+
+`FLAVOR` で、同じ診断ツールに足すデスクトップを選ぶ(`auto/config`)。ISO 名は `bootkit-linux-<arch>-<flavor>.iso`。
+
+- `cli`: コマンドラインのみ。
+- `lxqt`: LXQt と Calamares を足す。
+- `icewm`: 軽量な IceWM を足す。tty1 の自動ログイン後に X を起動する。起動オプション `nox` を付けると CLI のままで、あとから `startx` で起動できる。
+
 ## 作り方
 
 GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)か、`auto/` と `config/` を変更して main に push する。成果物の ISO と `SHA256SUMS` が、アーティファクトに 30 日保管される。
