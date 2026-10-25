@@ -11,6 +11,8 @@ set -e
 ARCH="${ARCH:-amd64}"
 FLAVOR="${FLAVOR:-cli}"
 rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chroot
+rm -f config/hooks/live/0100-no-modemmanager.hook.chroot \
+	config/hooks/live/0200-icewm-keys.hook.chroot
 rm -rf config/includes.chroot
 case "$FLAVOR" in
 	cli) ;;
@@ -19,11 +21,92 @@ case "$FLAVOR" in
 		printf '%s\n' live-task-lxqt calamares calamares-settings-debian > config/package-lists/lxqt.list.chroot
 		;;
 	icewm)
-		mkdir -p config/package-lists config/includes.chroot/etc/skel
+		mkdir -p config/package-lists config/hooks/live \
+			config/includes.chroot/etc/skel/.config/autostart \
+			config/includes.chroot/usr/local/bin
 		printf '%s\n' xserver-xorg-core xserver-xorg-input-libinput xserver-xorg-video-all xinit \
-			icewm pcmanfm lxterminal network-manager wpasupplicant fonts-noto-cjk xdg-utils \
+			icewm pcmanfm lxterminal network-manager wpasupplicant fonts-noto-cjk xdg-utils x11-xkb-utils kbd \
+			fcitx5 fcitx5-mozc fcitx5-frontend-gtk3 fcitx5-frontend-qt5 im-config \
 			> config/package-lists/icewm.list.chroot
-		printf '%s\n' 'exec icewm-session' > config/includes.chroot/etc/skel/.xinitrc
+		cat > config/includes.chroot/etc/skel/.xinitrc <<'EOF'
+# 入力用の環境だけを継承させる。Fcitx5 本体は ime-on で起動する。
+export GTK_IM_MODULE=fcitx QT_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+exec icewm-session
+EOF
+		# デスクトップの自動起動からも Fcitx5 を起動しない。
+		cat > config/includes.chroot/etc/skel/.config/autostart/org.fcitx.Fcitx5.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Fcitx 5
+Hidden=true
+EOF
+		cat > config/hooks/live/0100-no-modemmanager.hook.chroot <<'EOF'
+#!/bin/sh
+# 不在・削除失敗でもビルドを続ける。
+apt-get purge -y modemmanager || :
+apt-get autoremove -y || :
+EOF
+		cat > config/includes.chroot/usr/local/bin/kbd-toggle <<'EOF'
+#!/bin/sh
+set -e
+if [ -n "${DISPLAY:-}" ]; then
+    current=$(setxkbmap -query | awk '$1 == "layout:" { print $2 }')
+    case "$current" in
+        us) layout=jp ;;
+        *) layout=us ;;
+    esac
+    setxkbmap -layout "$layout"
+else
+    # コンソールは配列名を取得できないため、最後の切り替えを記録する。
+    state_dir=${XDG_STATE_HOME:-$HOME/.local/state}
+    state_file=$state_dir/kbd-toggle-console
+    current=jp
+    if [ -r /etc/default/keyboard ]; then
+        current=$(sed -n 's/^XKBLAYOUT="\([^" ]*\)"/\1/p' /etc/default/keyboard)
+    fi
+    if [ -r "$state_file" ]; then
+        IFS= read -r current < "$state_file"
+    fi
+    case "$current" in
+        us) layout=jp; keymap=jp106 ;;
+        *) layout=us; keymap=us ;;
+    esac
+    loadkeys "$keymap" >/dev/null
+    mkdir -p "$state_dir"
+    printf '%s\n' "$layout" > "$state_file"
+fi
+printf '%s\n' "$layout"
+EOF
+		cat > config/includes.chroot/usr/local/bin/ime-on <<'EOF'
+#!/bin/sh
+set -e
+export GTK_IM_MODULE=fcitx QT_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+fcitx5 -d
+printf '%s\n' 'このあとに起動するアプリで日本語入力が使える'
+EOF
+		cat > config/hooks/live/0200-icewm-keys.hook.chroot <<'EOF'
+#!/bin/sh
+set -e
+mkdir -p /etc/skel/.icewm
+if [ -f /usr/share/icewm/keys ]; then
+    cp /usr/share/icewm/keys /etc/skel/.icewm/keys
+else
+    printf '%s\n' 'WARNING: /usr/share/icewm/keys がないため、追加のキー割り当てだけを設定します。' >&2
+    : > /etc/skel/.icewm/keys
+fi
+for binding in 'key "Ctrl+Alt+K" /usr/local/bin/kbd-toggle' \
+    'key "Ctrl+Alt+J" /usr/local/bin/ime-on'; do
+    if ! grep -Fqx -- "$binding" /etc/skel/.icewm/keys; then
+        printf '%s\n' "$binding" >> /etc/skel/.icewm/keys
+    fi
+done
+EOF
+		chmod +x config/hooks/live/0100-no-modemmanager.hook.chroot \
+			config/hooks/live/0200-icewm-keys.hook.chroot \
+			config/includes.chroot/usr/local/bin/kbd-toggle \
+			config/includes.chroot/usr/local/bin/ime-on
+		# 生成先のログイン時に変数を展開する。
+		# shellcheck disable=SC2016
 		printf '%s\n' \
 			'[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"' \
 			'# tty1 の自動ログイン後に X を起動する。起動オプションに nox があるときは、CLI のまま(あとで startx で起動できる)。' \

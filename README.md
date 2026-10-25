@@ -19,6 +19,10 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 - `lxqt`: LXQt と Calamares を足す。
 - `icewm`: 軽量な IceWM を足す。tty1 の自動ログイン後に X を起動する。起動オプション `nox` を付けると CLI のままで、あとから `startx` で起動できる。
 
+IceWM では、携帯回線モデムを管理する ModemManager を削除する(NetworkManager は残す)。キーボードは JIS 配列が既定で、`Ctrl+Alt+K` で JIS / US を切り替える。端末から `kbd-toggle` を実行すると、切り替え後の配列名(`jp` / `us`)を表示する。起動時から US 配列にするには、起動メニューでカーネルの起動オプションの `keyboard-layouts=jp` を `keyboard-layouts=us` に変更する。`nox` で CLI のまま起動した場合も、`kbd-toggle` で切り替えられる(コンソールの配列変更には root 権限が必要なため、`sudo kbd-toggle` を使う)。
+
+日本語入力の Fcitx5 / Mozc は同梱するが、自動では起動しない。IceWM 上で `Ctrl+Alt+J`、または端末から `ime-on` で起動し、そのあとに起動するアプリで日本語入力を使う。入力用の環境変数は X セッションの開始時に設定する。IceWM の既定のキー割り当て(`Alt+Tab` など)も使える。
+
 ## 作り方
 
 GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)か、`auto/` と `config/` を変更して main に push する。成果物の ISO と `SHA256SUMS` が、アーティファクトに 30 日保管される。
