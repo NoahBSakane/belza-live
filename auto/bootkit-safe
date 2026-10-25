@@ -1,0 +1,22 @@
+#!/bin/sh
+# udev の prereqs にこのスクリプトを追加するのは bootkit-safe-hook。
+set -eu
+prereqs() { printf '\n'; }
+case "${1:-}" in
+    prereqs) prereqs; exit 0 ;;
+esac
+
+cmdline=${BOOTKIT_CMDLINE:-/proc/cmdline}
+rules=${BOOTKIT_RULES_DIR:-/run/udev/rules.d}
+# 部分一致(bootkit.safe=10 など)を避け、独立した引数だけを認める。
+if ! grep -Eq '(^|[[:space:]])bootkit\.safe=1([[:space:]]|$)' "$cmdline"; then
+    exit 0
+fi
+mkdir -p "$rules"
+for name in 64-md-raid-assembly.rules 63-md-raid-arrays.rules 69-lvm.rules; do
+    : > "$rules/$name"
+done
+# 遅れて接続されたディスク・パーティションにも適用する。
+# shellcheck disable=SC2016
+printf '%s\n' 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*", RUN+="/sbin/blockdev --setro $devnode"' \
+    > "$rules/99-bootkit-safe.rules"

@@ -61,7 +61,9 @@ check_clean() {
     for file in "$hook" "$keys_hook" "$kbd" "$ime" "$keys" "$packages"; do
         [ ! -e "$file" ] || fail "$1 への切り替え後に $file が残った"
     done
-    [ ! -e config/includes.chroot ] || fail "$1 に icewm の設定が残った"
+    [ ! -e config/includes.chroot/etc/skel ] || fail "$1 に icewm の設定が残った"
+    [ ! -e config/includes.chroot/usr/local/bin ] || fail "$1 に icewm のコマンドが残った"
+    [ -x config/includes.chroot/etc/initramfs-tools/scripts/init-top/bootkit-safe ] || fail "$1 に共通の安全モードがない"
     case "$1" in
         cli) [ ! -e config/package-lists/lxqt.list.chroot ] || fail 'cli に LXQt が残った' ;;
         lxqt)

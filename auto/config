@@ -115,9 +115,16 @@ EOF
 		;;
 	*) echo "unsupported FLAVOR: $FLAVOR" >&2; exit 1 ;;
 esac
+# includes.chroot はフレーバーを切り替えるたびに作り直す。安全モードは共通。
+mkdir -p config/includes.chroot/etc/initramfs-tools/scripts/init-top \
+	config/includes.chroot/etc/initramfs-tools/hooks
+cp auto/bootkit-safe config/includes.chroot/etc/initramfs-tools/scripts/init-top/bootkit-safe
+cp auto/bootkit-safe-hook config/includes.chroot/etc/initramfs-tools/hooks/bootkit-safe
+chmod +x config/includes.chroot/etc/initramfs-tools/scripts/init-top/bootkit-safe \
+	config/includes.chroot/etc/initramfs-tools/hooks/bootkit-safe
 case "$ARCH" in
-	amd64) BOOTLOADERS="syslinux,grub-efi" ;;
-	arm64) BOOTLOADERS="grub-efi" ;;
+	amd64) BOOTLOADERS="syslinux,grub-efi"; MEMTEST="memtest86+" ;;
+	arm64) BOOTLOADERS="grub-efi"; MEMTEST="none" ;;
 	*) echo "unsupported ARCH: $ARCH" >&2; exit 1 ;;
 esac
 lb config noauto \
@@ -131,7 +138,7 @@ lb config noauto \
 	--debian-installer live \
 	--debian-installer-distribution trixie \
 	--debian-installer-gui false \
-	--memtest none \
+	--memtest "$MEMTEST" \
 	--firmware-chroot true \
 	--firmware-binary true \
 	--iso-application "bootkit-linux" \

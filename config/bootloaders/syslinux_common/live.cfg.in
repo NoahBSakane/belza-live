@@ -1,0 +1,24 @@
+label live-@FLAVOUR@
+	menu label ^Live system (@FLAVOUR@)
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-failsafe
+	menu label Live system (@FLAVOUR@ fail-safe mode)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE_FAILSAFE@
+
+label live-@FLAVOUR@-toram
+	menu label Live system, copy to RAM
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ toram
+
+label live-@FLAVOUR@-safe
+	menu label Live system, safe mode
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ bootkit.safe=1

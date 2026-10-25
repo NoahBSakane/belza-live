@@ -1,0 +1,29 @@
+#!/bin/sh
+# mkinitramfs が起動スクリプトをコピーした後、ORDER を作る前に実行される。
+set -eu
+prereqs() { printf '\n'; }
+case "${1:-}" in
+    prereqs) prereqs; exit 0 ;;
+esac
+# 試験時は copy_exec のスタブを読み込む。
+# shellcheck disable=SC1090,SC1091
+. "${BOOTKIT_HOOK_FUNCTIONS:-/usr/share/initramfs-tools/hook-functions}"
+copy_exec /sbin/blockdev /sbin
+udev=$DESTDIR/scripts/init-top/udev
+# prereqs は「後に動く相手」を指定する機能ではない。udev 側に依存を足す。
+# trixie の書式が変わった場合は、順序未保証の ISO を作らずビルドを止める。
+grep -q '^PREREQS=".*"$' "$udev"
+case " $(sh "$udev" prereqs) " in
+    *" bootkit-safe "*) ;;
+    *)
+        sed 's/^PREREQS="\(.*\)"$/PREREQS="\1 bootkit-safe"/' "$udev" > "$udev.bootkit"
+        cat "$udev.bootkit" > "$udev"
+        rm "$udev.bootkit"
+        ;;
+esac
+# 0.148.4 の cache_run_scripts/get_source は DESTDIR の複製でなく
+# CONFDIR 側の原本から prereqs を読む(noexec の一時領域への対応)。
+# パッケージ所有の原本は変えず、ローカルの上書きにも同じ内容を置く。
+local_scripts=${CONFDIR:-/etc/initramfs-tools}/scripts/init-top
+mkdir -p "$local_scripts"
+cp -p "$udev" "$local_scripts/udev"
