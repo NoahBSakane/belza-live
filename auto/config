@@ -20,14 +20,14 @@ case "$FLAVOR" in
 	cli) ;;
 	lxqt)
 		mkdir -p config/package-lists
-		printf '%s\n' live-task-lxqt calamares calamares-settings-debian > config/package-lists/lxqt.list.chroot
+		printf '%s\n' live-task-lxqt calamares calamares-settings-debian gparted > config/package-lists/lxqt.list.chroot
 		;;
 	icewm)
 		mkdir -p config/package-lists config/hooks/live \
 			config/includes.chroot/etc/skel/.config/autostart \
 			config/includes.chroot/usr/local/bin
 		printf '%s\n' xserver-xorg-core xserver-xorg-input-libinput xserver-xorg-video-all xinit \
-			icewm pcmanfm lxterminal network-manager wpasupplicant fonts-noto-cjk xdg-utils x11-xkb-utils kbd \
+			icewm pcmanfm lxterminal gparted network-manager wpasupplicant fonts-noto-cjk xdg-utils x11-xkb-utils kbd \
 			fcitx5 fcitx5-mozc fcitx5-frontend-gtk3 fcitx5-frontend-qt5 im-config \
 			> config/package-lists/icewm.list.chroot
 		cat > config/includes.chroot/etc/skel/.xinitrc <<'EOF'

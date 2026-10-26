@@ -26,7 +26,7 @@ mkdir -p "$COPY/.test-tmp"
 TMPDIR=$COPY/.test-tmp
 export TMPDIR
 cd "$COPY"
-tests='test-flavor-files.sh test-forky-hook.sh test-boot-config.sh test-survey.sh test-disk-guard.sh test-release-assets.sh'
+tests='test-diag-packages.sh test-flavor-files.sh test-forky-hook.sh test-boot-config.sh test-survey.sh test-disk-guard.sh test-release-assets.sh'
 for optional in test-ventoy-bundle.sh test-qemu-boot-args.sh test-forky-deps.py; do
     if [ -f "tests/$optional" ]; then tests="$tests $optional"; fi
 done

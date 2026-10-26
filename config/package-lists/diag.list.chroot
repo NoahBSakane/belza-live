@@ -4,6 +4,8 @@ mdadm
 btrfs-progs
 xfsprogs
 e2fsprogs
+f2fs-tools
+jfsutils
 dosfstools
 exfatprogs
 ntfs-3g
@@ -11,6 +13,7 @@ parted
 gdisk
 hdparm
 sdparm
+sg3-utils
 nvme-cli
 lsscsi
 gddrescue
@@ -28,10 +31,17 @@ iperf3
 tcpdump
 rsync
 curl
+wget
+smbclient
 openssh-server
 tmux
 less
 vim-tiny
+vim
+lsof
+strace
+jq
+git
 restic
 clonezilla
 partclone
@@ -40,6 +50,13 @@ partimage
 # 起動修復・複製・転送
 efibootmgr
 fsarchiver
+zerofree
+xorriso
+squashfs-tools
+lftp
+borgbackup
+gnupg
+kexec-tools
 cifs-utils
 sshfs
 nfs-common
@@ -47,6 +64,7 @@ dislocker
 chntpw
 
 # 展開器(他の Clonezilla で作ったイメージの復元用)
+7zip
 zstd
 lz4
 xz-utils
@@ -62,6 +80,8 @@ lrzip
 wpasupplicant
 iw
 network-manager
+rfkill
+wireless-tools
 
 # 補助(B): 消去・仮想ディスク・操作・調査・救出
 nwipe
@@ -83,6 +103,20 @@ stress-ng
 gpart
 foremost
 safecopy
+screen
+net-tools
+traceroute
+whois
+mtr-tiny
+iotop
+sysstat
+ipmitool
+openvpn
+wireguard-tools
+minicom
+picocom
+sleuthkit
+ewf-tools
 
 # 起動ローダー修復(アーキテクチャ別)
 #if ARCHITECTURES amd64

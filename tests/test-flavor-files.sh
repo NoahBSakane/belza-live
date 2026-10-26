@@ -70,7 +70,7 @@ check_clean() {
     case "$1" in
         cli) [ ! -e config/package-lists/lxqt.list.chroot ] || fail 'cli に LXQt が残った' ;;
         lxqt)
-            printf '%s\n' live-task-lxqt calamares calamares-settings-debian > expected-lxqt
+            printf '%s\n' live-task-lxqt calamares calamares-settings-debian gparted > expected-lxqt
             cmp expected-lxqt config/package-lists/lxqt.list.chroot
             ;;
     esac
