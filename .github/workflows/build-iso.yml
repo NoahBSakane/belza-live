@@ -42,7 +42,7 @@ jobs:
       - name: Build the ISO in a Debian trixie container
         run: |
           docker run --rm --privileged --security-opt seccomp=unconfined \
-            -e ARCH=${{ matrix.arch }} -e FLAVOR=${{ matrix.flavor }} \
+            -e ARCH=${{ matrix.arch }} -e FLAVOR=${{ matrix.flavor }} -e TZ=Asia/Tokyo \
             -v "$PWD":/work -w /work debian:trixie bash -euxc '
               apt-get update
               if [ "$ARCH" = amd64 ]; then
@@ -52,7 +52,7 @@ jobs:
               fi
               apt-get install -y --no-install-recommends \
                 live-build debootstrap xorriso $EXTRA \
-                squashfs-tools ca-certificates git sudo dosfstools mtools cpio
+                squashfs-tools ca-certificates git sudo dosfstools mtools cpio tzdata
               ./auto/config
               ./auto/build
             '

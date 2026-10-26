@@ -57,7 +57,7 @@ sudo hw-survey --speed --mb 128 --out /tmp/my-hw-survey
 
 `survey` は DMI から ThinkPad Edge 14 / 0578、Lenovo G560 / 0679 / 20042 を判定し、該当しなければ generic にする。`survey --list` で指定可能な ID を表示する。内蔵の固定ディスクだけを `hdparm -t --direct` で 3 回読み、中央値を表示し、180 秒の CPU 負荷と温度監視を追加する。`survey --long` では SMART long と空きメモリの半分以下の memtester 1 パスも実行する。swap は停止し、停止できなければ負荷・メモリ試験を省略する。出力は RAM 上だけで、撮影用の要約を表示したまま Enter を待つ。
 
-amd64 の起動メニューにある `Hardware survey: ThinkPad Edge 14 (0578), auto`、`Hardware survey: Lenovo G560, auto`、`Hardware survey: other PC, auto (generic)` を選ぶと、安全モードで起動して tty1 で自動検査する。通常起動・arm64 では自動検査しない。[実機検査の手順と判定の目安](docs/hw-survey-procedure.md)を参照。
+amd64 の起動メニューにある `Hardware survey: generic, auto`、`Hardware survey: Lenovo G560, auto`、`Hardware survey: ThinkPad Edge 14 (0578), auto` を選ぶと、安全モードで起動して tty1 で自動検査する。通常起動・arm64 では自動検査しない。[実機検査の手順と判定の目安](docs/hw-survey-procedure.md)を参照。
 
 ## ローカルのテスト
 
@@ -80,6 +80,10 @@ IceWM では、携帯回線モデムを管理する ModemManager を削除する
 全フレーバーで、SSH サーバーは既定では起動しない。必要なときは Live の端末で `ssh-on` を実行する。案内に従って Live ユーザー `user` のパスワードを変更すると、SSH サーバーを起動し、接続先のアドレスを表示する。root で実行した場合も `user` のパスワードを変更する。パスワードの変更に失敗した場合は起動しない。
 
 既定のパスワード `live` は公開情報であり、そのまま LAN からのログインに使わない。
+
+## 起動画面の画像
+
+起動メニューの画像(`config/bootloaders/splash.svg`)は、Debian の live-build の標準の画像(ヘルメットと文字の配置)に、Tux(Linux のペンギン)を重ねたもの。ビルド時に、`rsvg-convert` が日時・カーネルの版などの文字を埋めて PNG にする。日時は日本時間(JST)で表示する。Tux の画像は、Larry Ewing、Simon Budig、Garrett LeSage の作品で、Larry Ewing(lewing@isc.tamu.edu)と The GIMP への謝辞を付ければ、使用・改変できる。
 
 ## 起動メニュー
 

@@ -10,9 +10,9 @@
 
 | 機種 | 起動メニュー |
 | --- | --- |
-| ThinkPad Edge 14 / 0578 | `Hardware survey: ThinkPad Edge 14 (0578), auto` |
+| その他(generic) | `Hardware survey: generic, auto` |
 | Lenovo G560 / 0679 / 20042 | `Hardware survey: Lenovo G560, auto` |
-| その他 | `Hardware survey: other PC, auto (generic)` |
+| ThinkPad Edge 14 / 0578 | `Hardware survey: ThinkPad Edge 14 (0578), auto` |
 
 いずれも `bootkit.safe=1` を付けた安全モードで起動し、tty1 で自動検査する。検査終了後は要約を残して Enter を待つ。撮影してから Enter を押すとシェルに戻る。通常起動では自動検査しない。arm64 にこの起動メニューはない。
 
