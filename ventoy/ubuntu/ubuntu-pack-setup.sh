@@ -12,10 +12,20 @@ fi
 [ "$(findmnt -rn -o FSTYPE /)" = overlay ] || {
     echo 'Live の overlay ルートでのみ実行してください' >&2; exit 1;
 }
-findmnt -rn -t ext4 -o LABEL,OPTIONS | awk '
-    $1 == "casper-rw" && $2 ~ /(^|,)rw(,|$)/ { found=1 }
-    END { exit !found }
-' || { echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1; }
+# Ventoy の persistence は ext4 の単独のマウントとして見えず、`persistent` もコマンドラインに出ない。
+# 代わりに、casper-rw ラベルのデバイスが存在し、ルート(overlay)の容量がそのデバイスの容量に近い
+# (RAM 上の tmpfs ではない)ことで、persistence 上のルートだと判定する。
+persist_dev=$(blkid -L casper-rw 2>/dev/null) && [ -n "$persist_dev" ] || {
+    echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1;
+}
+root_opts=$(findmnt -rn -o OPTIONS /)
+case ",$root_opts," in *,rw,*) ;; *) echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1 ;; esac
+root_size=$(df -B1 --output=size / | tail -n 1 | tr -d ' ')
+dev_size=$(blockdev --getsize64 "$persist_dev")
+# ext4 の使用可能容量はデバイスの 85〜100% になる。RAM 上のルートとは通常一致しない。
+[ "$root_size" -ge $((dev_size * 85 / 100)) ] && [ "$root_size" -le "$dev_size" ] || {
+    echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1;
+}
 user=${SUDO_USER:-}
 [ -n "$user" ] && [ "$user" != root ] || {
     echo 'Live ユーザーの端末から sudo sh で実行してください' >&2; exit 1;

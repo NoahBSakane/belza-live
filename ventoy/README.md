@@ -74,14 +74,16 @@ Ventoy で ISO を選ぶと、自動インストールのテンプレート選�
 
 ## Live の追加パックの初回導入
 
-persistence を有効にした Ubuntu Live から、USB の `ventoy/ubuntu/` を開き、**Live ユーザーの端末**で実行する。初回は文字画面でも Ubuntu の GUI でもよい。
+persistence を有効にした Ubuntu Live から、USB の `ventoy/ubuntu/` を使い、**Live ユーザーの端末**で実行する。初回は文字画面でも Ubuntu の GUI でもよい。
+
+USB の第 1 パーティション(`/dev/vda1`・`/dev/sdX1` など)は、Ventoy が ISO のために掴んでいて、直接はマウントできない(`Can't open blockdev`)。Ventoy が用意する `/dev/mapper/VentoyPart` を読み取りでマウントする。
 
 ```sh
-cd /path/to/USB/ventoy/ubuntu
-sudo sh ubuntu-pack-setup.sh
+sudo mount -o ro /dev/mapper/VentoyPart /mnt
+sudo sh /mnt/ventoy/ubuntu/ubuntu-pack-setup.sh
 ```
 
-書き込み可能な `casper-rw`、ネットワーク経路、DNS を確認してから APT 索引を更新し、`lubuntu-desktop ubuntu-server openssh-server` を導入する。容量の概算は LXQt 約 1.9GB + Server 約 240MB。APT キャッシュ・更新差分・ユーザーデータは別途必要で、4 GiB の保存領域には余裕が小さい。実際の空き容量とダウンロード量は APT の表示でも確認する。
+`casper-rw` ラベルのデバイスがあり、ルートの容量がそのデバイスに近い(RAM 上でない)こと、ネットワーク経路、DNS を確認してから APT 索引を更新し、`lubuntu-desktop ubuntu-server openssh-server` を導入する。容量の概算は LXQt 約 1.9GB + Server 約 240MB。APT キャッシュ・更新差分・ユーザーデータは別途必要で、4 GiB の保存領域には余裕が小さい。実際の空き容量とダウンロード量は APT の表示でも確認する。
 
 導入中のサービス自動起動を `policy-rc.d` で抑え、既存の policy は終了時に戻す。SSH サービスとソケットは停止・無効化する。完了印は全工程の成功後だけに残し、2 回目は何もしない。途中失敗時はエラーで止まり、再実行で導入を続ける。既存の SSH を意図的に有効化した場合も、完了印のある再実行は変更しない。
 

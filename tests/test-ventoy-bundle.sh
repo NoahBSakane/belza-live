@@ -227,6 +227,35 @@ image.unlink()
 require(subprocess.run(command, env=env, capture_output=True).returncode != 0 and not image.exists(), '失敗した生成物が残った')
 print('PASS: persistence の引数・既存/symlink 拒否・失敗時後始末 (偽 formatter)')
 
+# The pack installer decides that the root is on Ventoy persistence without a separate ext4 mount:
+# a casper-rw labelled device exists and the overlay root's size is close to that device's size.
+pack_bin = work / 'pack-bin'
+pack_bin.mkdir()
+for name, script in {
+    'id': '#!/bin/sh\n[ "$1" = -u ] && echo 0\n',
+    'findmnt': '#!/bin/sh\ncase "$*" in *FSTYPE*) echo overlay ;; *OPTIONS*) echo rw,relatime ;; esac\n',
+    'blkid': '#!/bin/sh\n[ "$1" = -L ] && [ "$2" = casper-rw ] && [ -n "${BLKID_DEV:-}" ] && echo "$BLKID_DEV"\n',
+    'blockdev': '#!/bin/sh\n[ "$1" = --getsize64 ] && echo "$DEV_SIZE"\n',
+    'df': '#!/bin/sh\nprintf "Size\\n%s\\n" "$DF_SIZE"\n',
+}.items():
+    path = pack_bin / name
+    path.write_text(script)
+    path.chmod(0o755)
+
+def pack_run(df_size, blkid_dev='/dev/dm-1'):
+    pack_env = dict(os.environ, PATH=str(pack_bin) + os.pathsep + os.environ['PATH'],
+                    DEV_SIZE='4294967296', DF_SIZE=str(df_size), BLKID_DEV=blkid_dev)
+    pack_env.pop('SUDO_USER', None)
+    return subprocess.run(['sh', str(bundle / 'ubuntu/ubuntu-pack-setup.sh')], env=pack_env, capture_output=True, text=True)
+
+refusal = '書き込み可能な casper-rw persistence が見つかりません'
+passed = pack_run(4_000_000_000)
+require(refusal not in passed.stderr and 'Live ユーザー' in passed.stderr, 'persistence 上のルートを拒否した')
+require(refusal in pack_run(2_000_000_000).stderr, 'RAM 上のルートを persistence と誤認した')
+require(refusal in pack_run(5_000_000_000).stderr, 'デバイスより大きいルートを許可した')
+require(refusal in pack_run(4_000_000_000, blkid_dev='').stderr, 'casper-rw が無いのに許可した')
+print('PASS: 追加パックの persistence 判定 (ラベル+容量。偽コマンド)')
+
 # Validate the optional index checker against known complete/incomplete indexes.
 checker = bundle / 'check-package-index.py'
 result = subprocess.run([sys.executable, '-I', str(checker)], capture_output=True)
