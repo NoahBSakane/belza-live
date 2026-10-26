@@ -11,7 +11,7 @@
 | 機種 | 起動メニュー |
 | --- | --- |
 | ThinkPad Edge 14 / 0578 | `Hardware survey: ThinkPad Edge 14 (0578), auto` |
-| IdeaPad G560 / 0679 / 20042 | `Hardware survey: IdeaPad G560, auto` |
+| Lenovo G560 / 0679 / 20042 | `Hardware survey: Lenovo G560, auto` |
 | その他 | `Hardware survey: other PC, auto (generic)` |
 
 いずれも `bootkit.safe=1` を付けた安全モードで起動し、tty1 で自動検査する。検査終了後は要約を残して Enter を待つ。撮影してから Enter を押すとシェルに戻る。通常起動では自動検査しない。arm64 にこの起動メニューはない。
@@ -83,7 +83,7 @@ SMART long / メモリ実試験: 未試験 (--longで追加)
 
 ThinkPad Edge 14 / 0578 は Arrandale/HM55 世代。tp_smapi は使えず、電池の cycle_count が 0 でも劣化判定に使わない。ファンの読み値は不確実なので、無い場合も故障にしない。レガシー BIOS のため EFI variables 非対応は正常。TrackPoint 未認識は異常候補として手動確認する。Intel 1000 の 2.4GHz のみは正常で、6200 は 5GHz にも対応する。有線 100Mb/s はケーブルや相手機器を含めて確認する。従来のドック用コネクタは対象外。
 
-IdeaPad G560 / 0679 / 20042 の機種固有値は未確認の初期値。GPU は UMA / DIS、SATA は AHCI / IDE を記録し、変更しない。10de:0a70 があり BIOS が 29CN31WW より古い場合、画面異常を既知の VBIOS 不具合の範囲として記録する。10ec:8136 の LAN は 100Mb/s が正常で、ギガビットと確認できた構成だけ 1000Mb/s を目安にする。メモリの公式上限は 8GB で、SMBIOS の 16GB 表記は保証ではない。TrackPoint・thinkpad_acpi・指紋・TPM が無くても減点しない。無線の Hard blocked と本体のワイヤレススイッチ位置を併せて記録する。
+Lenovo G560 / 0679 / 20042 の機種固有値は未確認の初期値。GPU は UMA / DIS、SATA は AHCI / IDE を記録し、変更しない。10de:0a70 があり BIOS が 29CN31WW より古い場合、画面異常を既知の VBIOS 不具合の範囲として記録する。10ec:8136 の LAN は 100Mb/s が正常で、ギガビットと確認できた構成だけ 1000Mb/s を目安にする。メモリの公式上限は 8GB で、SMBIOS の 16GB 表記は保証ではない。TrackPoint・thinkpad_acpi・指紋・TPM が無くても減点しない。無線の Hard blocked と本体のワイヤレススイッチ位置を併せて記録する。
 
 CMOS 電池・HDD/Supervisor パスワードは Linux から確実には分からないため手動確認する。液晶のドット抜け、ヒンジの割れ、キー打鍵、ファン音は目視欄に記録する。
 
