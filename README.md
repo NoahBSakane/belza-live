@@ -83,7 +83,7 @@ IceWM では、携帯回線モデムを管理する ModemManager を削除する
 
 ## 起動画面の画像
 
-起動メニューの画像(`config/bootloaders/splash.svg`)は、Debian の live-build の標準の画像(ヘルメットと文字の配置)に、Tux(Linux のペンギン)を重ねたもの。ビルド時に、`rsvg-convert` が日時・カーネルの版などの文字を埋めて PNG にする。日時は日本時間(JST)で表示する。Tux の画像は、Larry Ewing、Simon Budig、Garrett LeSage の作品で、Larry Ewing(lewing@isc.tamu.edu)と The GIMP への謝辞を付ければ、使用・改変できる。
+起動メニューの画像(`config/bootloaders/splash.svg`)は、Debian の live-build の標準の画像(ヘルメットと文字の配置)に、Tux(Linux のペンギン)を重ねたもの。ビルド時に、`rsvg-convert` が日時・カーネルの版などの文字を埋めて PNG にする。日時は日本時間(JST)で表示する。Tux の画像は、Larry Ewing、Simon Budig、Garrett LeSage の作品で、Larry Ewing(`lewing@isc.tamu.edu`)と The GIMP への謝辞を付ければ、使用・改変できる。
 
 ## 起動メニュー
 
