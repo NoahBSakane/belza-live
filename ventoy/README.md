@@ -53,7 +53,8 @@ sudo python3 -I ventoy/update-ventoy-mbr.py --ventoy-dir ./ventoy-1.1.18 --backu
 - 書き込み前に、先頭 1MiB と第 2 パーティションを `--backup-dir` へ退避し、書き込み後に全領域を読み戻して照合する。書き込みは 512 バイト境界に揃えてある(`/dev/rdisk` は端数の書き込みができない)。
 - Mac のデバイスへの書き込みは root が要る。先に `diskutil unmountDisk diskN` でマウントを外す。
 - 検証(2026-10-26): Alpine Linux 上の本物の `Ventoy2Disk.sh -I` で作った 2GiB の仮ディスクに、起動コード・コア領域を壊した状態を作り、本物の `-u` とこのスクリプトを同じ入力で実行して比較した。active フラグの入れ替えがある場合とない場合の両方で、先頭 1MiB と第 2 パーティションの先頭 64,883 セクタが完全に一致した。第 2 パーティションの末尾は、Alpine の busybox `dd` が書き漏らして本物の方が欠けた(約 647 セクタ)。Alpine などの busybox 環境では本物の更新スクリプトを使わない。
-- 実機の USB(1TB)での実行は、この記録の時点では未実施。
+- 実機での実行(2026-10-26): MBR・第 2 パーティション 32MiB・セキュアブート版の 1TB の USB(第 1 パーティションにデータ約 870GB)で、`update-ventoy-mac.sh` と同じ手順(検査 → 退避 → 書き込み → 読み戻し照合)を実行し、読み戻し照合が成功した。更新後の USB の第 1 パーティションのファイルは無傷だった。更新後の Ventoy を QEMU(UEFI)の仮ディスクで起動し、1.1.18 のメニュー・自動インストールのテンプレート選択・persistence の選択が表示されることを確認した。
+- Mac から呼ぶ入口: `bash ventoy/update-ventoy-mac.sh <ボリューム名> <展開した ventoy-X.Y.Z のフォルダ>`(`sudo` のパスワードが要る)。
 - Apple 仮想化(UTM の Apple バックエンド)の VM に USB の NVMe ケース(SuperSpeed Plus)を渡すと、`can't set config #1, error -32` で認識できなかった。VM 経由の更新はできない。
 
 ## Live 起動
