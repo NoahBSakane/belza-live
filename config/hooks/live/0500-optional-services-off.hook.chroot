@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+# OpenVPN の集約サービスによるトンネルの自動接続を止める。
+# sysstat の起動時記録と定期収集・集計・ローテーションも Live では不要。
+# コマンドと手動起動は残すため mask はしない。失敗はビルドエラーにする。
+for unit in openvpn.service sysstat.service \
+    sysstat-collect.timer sysstat-summary.timer sysstat-rotate.timer; do
+    systemctl disable "$unit"
+done
