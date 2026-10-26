@@ -82,6 +82,17 @@ IceWM では、携帯回線モデムを管理する ModemManager を削除する
 
 安全モードは、壊れかけのディスクに対する OS の自動処理による書き込みを抑えるためのもの。ハードウェアの書き込み防止装置ではなく、管理者による明示的な操作は禁止しない。たとえば `mdadm --assemble` の実行や `blockdev --setrw` による解除は可能で、機器への直接のコマンドや機器自身の内部処理まで防ぐものではない。udev の規則以外から行う RAID 組み立て・LVM 有効化も制限しない。安全モードでも起動 USB 自体を読み取り専用にするため、USB の書き換えには解除が要る。実機での安全モードの動作確認は未実施。
 
+## SystemRescue との違い
+
+診断・復旧用の道具は、SystemRescue 13.02(amd64)の主な項目をパッケージとして足してあり、多くの用途で置き換えられる。足していない、または再現していない機能は次のとおり。
+
+- 起動時に任意のスクリプトを実行する `autorun` と、YAML の設定ファイルによる起動時の構成。
+- 配布 ISO を書き換えて道具や設定を足す `sysrescue-customize`。この ISO は、`config/` を変えて作り直す。
+- カーネルの版。SystemRescue 13.02 は 6.18 系で、この ISO は Debian 13 の 6.12 系。新しいハードウェアへの対応は、SystemRescue のほうが新しい場合がある。
+- Secure Boot での起動は未確認。
+
+これらが要るときは、SystemRescue の ISO を別に用意する。
+
 ## 作り方
 
 GitHub の Actions の `build-iso` を手動で実行する(`workflow_dispatch`)か、`auto/` と `config/` を変更して main に push する。成果物の ISO と `SHA256SUMS` が、アーティファクトに 30 日保管される。
