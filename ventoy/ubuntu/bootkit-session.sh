@@ -14,7 +14,9 @@ find_session() {
     desktop=$1
     for file in /usr/share/xsessions/*.desktop /usr/share/wayland-sessions/*.desktop; do
         [ -f "$file" ] || continue
-        case "$desktop:$(basename "$file")" in
+        # Ubuntu 26.04 ships Lubuntu.desktop: compare the file name case-insensitively.
+        name=$(basename "$file" | tr '[:upper:]' '[:lower:]')
+        case "$desktop:$name" in
             lubuntu:lubuntu.desktop|ubuntu:ubuntu.desktop) printf '%s\n' "$file"; return ;;
         esac
     done

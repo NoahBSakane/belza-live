@@ -145,7 +145,7 @@ for directory in ['usr/share/xsessions', 'usr/share/wayland-sessions', 'etc',
                   'var/lib/AccountsService/users', 'proc', 'bin']:
     (root / directory).mkdir(parents=True, exist_ok=True)
 (root / 'etc/bootkit-live-user').write_text('test-live-user\n')
-(root / 'usr/share/xsessions/lubuntu.desktop').write_text('[Desktop Entry]\nExec=lxqt-session\n')
+(root / 'usr/share/xsessions/Lubuntu.desktop').write_text('[Desktop Entry]\nExec=startlubuntu\n')  # Ubuntu 26.04 の実物は大文字の L
 (root / 'usr/share/wayland-sessions/ubuntu.desktop').write_text('[Desktop Entry]\nExec=gnome-session --session=ubuntu\n')
 (root / 'bin/getent').write_text('#!/bin/sh\nexit 0\n')
 (root / 'bin/getent').chmod(0o755)
@@ -163,14 +163,14 @@ runner.write_text(selector)
 env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'])
 account = root / 'var/lib/AccountsService/users/test-live-user'
 account.write_text('[User]\nLanguage=en_US.UTF-8\nXSession=stale\n[Other]\nSession=preserve\n')
-for argument, expected in [('bootkit.session=lubuntu', 'lubuntu'),
+for argument, expected in [('bootkit.session=lubuntu', 'Lubuntu'),
                            ('bootkit.session=server', 'ubuntu'),
                            ('bootkit.session=lubuntux', 'ubuntu'), ('', 'ubuntu')]:
     (root / 'proc/cmdline').write_text('quiet ' + argument + '\n')
     subprocess.run(['sh', str(runner)], env=env, check=True, capture_output=True)
     require('XSession=' + expected + '\n' in account.read_text(), 'セッション選択が違う')
     require('Language=en_US.UTF-8' in account.read_text() and '[Other]\nSession=preserve' in account.read_text(), '既存アカウント設定が消えた')
-    require('Session=lubuntu.desktop' in (root / 'etc/sddm.conf.d/99-bootkit.conf').read_text(), '手動 SDDM が LXQt でない')
+    require('Session=Lubuntu.desktop' in (root / 'etc/sddm.conf.d/99-bootkit.conf').read_text(), '手動 SDDM が LXQt でない')
 (root / 'usr/share/wayland-sessions/ubuntu.desktop').unlink()
 result = subprocess.run(['sh', str(runner)], env=env, capture_output=True)
 require(result.returncode != 0, 'セッション欠落を見逃した')
