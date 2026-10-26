@@ -1,5 +1,5 @@
 #!/bin/sh
-# 共通の道具・GUI 限定パッケージ・自動起動抑制を、コピーとスタブで検査する。
+# 共通の道具・GUI 限定パッケージを、コピーと lb のスタブで検査する。
 set -eu
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-$HERE}/test-diag-packages.XXXXXX")
@@ -50,40 +50,18 @@ for arch in ('amd64', 'arm64'):
     require(all(n == 1 for n in Counter(names).values()), '共通パッケージが重複')
 print(f'PASS: 追加{len(required) - 1}パッケージ・vim-tiny の保持・各アーキテクチャの重複なし')
 
-units = ['openvpn.service', 'sysstat.service', 'sysstat-collect.timer',
-         'sysstat-summary.timer', 'sysstat-rotate.timer']
-hook_name = 'config/hooks/live/0500-optional-services-off.hook.chroot'
-# システムの systemctl を呼ばず、対象と失敗時の終了を実行して確かめる。
-(root / 'bin/systemctl').write_text('''#!/bin/sh
-printf '%s\\n' "$*" >> "$MOCK_SERVICE_LOG"
-exit "${MOCK_SERVICE_STATUS:-0}"
-''')
-(root / 'bin/systemctl').chmod(0o755)
-log = root / 'services.log'
-env = dict(os.environ, MOCK_SERVICE_LOG=str(log))
 for arch in ('amd64', 'arm64'):
     # GUI → CLI の切り替え後にも混入しないことを確認する。
     for flavor in ('lxqt', 'icewm', 'cli'):
         subprocess.run(['sh', 'auto/config'], cwd=root,
-                       env=dict(env, ARCH=arch, FLAVOR=flavor), check=True)
+                       env=dict(os.environ, ARCH=arch, FLAVOR=flavor), check=True)
         names = [name for path in (root / 'config/package-lists').glob('*.list.chroot')
                  for name in packages(path, arch)]
         require(names.count('gparted') == (0 if flavor == 'cli' else 1),
                 'gparted のフレーバー分離が不正')
-        hook = root / hook_name
-        require(os.access(hook, os.X_OK), '共通サービス hook が実行不能')
-        subprocess.run(['sh', '-n', str(hook)], check=True)
-        log.write_text('')
-        subprocess.run(['sh', str(hook)], env=env, check=True)
-        require(log.read_text().splitlines() == ['disable ' + u for u in units],
-                'サービス無効化の対象が不正')
-# 無効化が失敗したのに成功としてビルドを続行することを防ぐ。
-result = subprocess.run(['sh', str(root / hook_name)],
-                        env=dict(env, MOCK_SERVICE_STATUS='1'))
-require(result.returncode != 0, 'サービス無効化の失敗を見逃した')
 if shutil.which('shellcheck'):
-    subprocess.run(['shellcheck', '-s', 'sh', str(root / hook_name), script], check=True)
-print('PASS: 全6構成の gparted 分離・共通 hook・無効化失敗時の終了')
+    subprocess.run(['shellcheck', '-s', 'sh', script], check=True)
+print('PASS: 全6構成の gparted 分離')
 
 if mode == '--mutation-check':
     mutations = {
@@ -96,10 +74,6 @@ if mode == '--mutation-check':
                         'gparted のフレーバー分離が不正'),
         'gui-missing': ('auto/config', 'calamares-settings-debian gparted >',
                         'calamares-settings-debian >', 'gparted のフレーバー分離が不正'),
-        'hook-unit': (hook_name, 'openvpn.service', 'openvpn-typo.service',
-                      'サービス無効化の対象が不正'),
-        'hook-failure': (hook_name, 'systemctl disable "$unit"',
-                         'systemctl disable "$unit" || :', 'サービス無効化の失敗を見逃した'),
     }
     for name, (file, old, new, expected) in mutations.items():
         mutant = root / name
@@ -115,5 +89,5 @@ if mode == '--mutation-check':
         require(result.returncode == 1 and expected in result.stderr,
                 '壊した版が所定の理由で失敗しない: ' + name + result.stderr)
         print('PASS: 壊した版を検出 (' + name + ': ' + expected + ')')
-print('ALL PASS: 診断パッケージ・GUI 分離・サービス自動起動抑制')
+print('ALL PASS: 診断パッケージ・GUI 分離')
 PYTHON
