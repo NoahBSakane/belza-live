@@ -9,10 +9,10 @@ while [ $# -gt 0 ]; do
         --list) printf '%s\n' edge14-0578 g560 generic; exit 0 ;;
         --long) long=1; shift ;;
         --profile) [ $# -ge 2 ] || exit 2; profile=$2; shift 2 ;;
-        *) echo '使い方: survey [--profile edge14-0578|g560|generic] [--long] [--list]' >&2; exit 2 ;;
+        *) echo 'Usage: survey [--profile edge14-0578|g560|generic] [--long] [--list]' >&2; exit 2 ;;
     esac
 done
-case "$profile" in ''|edge14-0578|g560|generic) ;; *) echo '不明なプロファイル' >&2; exit 2 ;; esac
+case "$profile" in ''|edge14-0578|g560|generic) ;; *) echo 'Unknown profile' >&2; exit 2 ;; esac
 if [ "$(id -u)" != 0 ]; then
     set --
     [ -z "$profile" ] || set -- --profile "$profile"
@@ -21,12 +21,12 @@ if [ "$(id -u)" != 0 ]; then
 fi
 run() {
     if command -v "$1" >/dev/null 2>&1; then
-        "$@" 2>&1 || printf '未取得: %s の実行失敗\n' "$1"
+        "$@" 2>&1 || printf 'N-A: %s failed\n' "$1"
     else missing "$1"; fi
 }
 dmi() {
     value=$(run dmidecode -s "$1")
-    case "$value" in ''|*未取得*) value=$(read_value "$HW_SYSFS/class/dmi/id/$2") ;; esac
+    case "$value" in ''|*N-A*) value=$(read_value "$HW_SYSFS/class/dmi/id/$2") ;; esac
     printf '%s\n' "$value"
 }
 product=$(dmi system-product-name product_name)
@@ -46,11 +46,11 @@ fi
 # shellcheck source=/dev/null
 . "$scripts/profiles/$profile.sh"
 root=${SURVEY_RAM_ROOT:-/run}
-fs=$(findmnt -n -o FSTYPE -T "$root" 2>/dev/null) || fs=不明
-case "$fs" in tmpfs|ramfs|overlay) ;; *) echo '未取得: RAM 保存先。検査を中止' >&2; exit 1 ;; esac
+fs=$(findmnt -n -o FSTYPE -T "$root" 2>/dev/null) || fs=N-A
+case "$fs" in tmpfs|ramfs|overlay) ;; *) echo 'N-A: RAM output directory; survey stopped' >&2; exit 1 ;; esac
 out=$(umask 077; mktemp -d "$root/survey.XXXXXX") || exit 1
 TMPDIR=$out; export TMPDIR
-printf '検査: %s。詳細: %s\n' "$PROFILE_NAME" "$out"
+printf 'Survey: %s; logs: %s\n' "$PROFILE_NAME" "$out"
 # swap への書き出しを防ぐ。失敗時は負荷・メモリ試験を実行しない。
 swap_ready=0
 if command -v swapoff >/dev/null 2>&1 && swapoff -a > "$out/swap.txt" 2>&1; then swap_ready=1; fi
@@ -70,27 +70,27 @@ while IFS= read -r disk; do
     run hdparm -I "/dev/$disk" > "$out/security-$disk.txt"
 done < "$out/internal-disks.txt"
 HW_SPEED_METHOD=hdparm; export HW_SPEED_METHOD
-"$scripts/hw-survey" --speed --out "$out/details" > "$out/hw-survey.txt" 2>&1 || echo '未取得: hw-survey' >> "$out/hw-survey.txt"
+"$scripts/hw-survey" --speed --out "$out/details" > "$out/hw-survey.txt" 2>&1 || echo 'N-A: hw-survey' >> "$out/hw-survey.txt"
 "$scripts/disk-guard-suggest" > "$out/disk-guard-suggest.txt" 2>&1
 # 追加の判定・温度監視。詳細は別ファイルに残す。
 # shellcheck source=auto/survey/survey-checks.sh
 . "$scripts/survey-checks.sh"
 {
     printf '== %s / %s ==\n' "$PROFILE_NAME" "$profile"
-    printf '機種: %s / %s / %s\nCPU: %s\n' "$product" "$version" "$family" "${cpu:-未取得}"
+    printf 'Model: %s / %s / %s\nCPU: %s\n' "$product" "$version" "$family" "${cpu:-N-A}"
     profile_checks
     disk_checks
     cooling_check
     long_checks
 } > "$out/summary-body.txt"
 {
-    awk 'NR<=32 {print} END {if(NR>32) printf "ほか %d 行は詳細ログを参照\n", NR-32}' "$out/summary-body.txt"
-    printf '%s\n' '手動: CMOS 電池・HDD/Supervisor パスワード' \
-        '目視: ドット抜け[ ] ヒンジ[ ] キー打鍵[ ] ファン音[ ]' \
-        'ポート: eSATA / ExpressCard / VGA / HDMI は機器なしなら未試験'
-    printf '詳細(RAM): %s\n' "$out"
-    printf '%s\n' '良/可/不可は取得範囲の判定。未取得・未試験は合格ではない' '撮影後 Enter で戻る'
-} > "$out/summary.txt"
+    awk 'NR<=32 {print} END {if(NR>32) printf "See logs for %d more lines\n", NR-32}' "$out/summary-body.txt"
+    printf '%s\n' 'MANUAL: CMOS battery / HDD and Supervisor passwords' \
+        'CHECK: dead pixels[ ] hinges[ ] keys[ ] fan noise[ ]' \
+        'Ports: eSATA / ExpressCard / VGA / HDMI UNTESTED without devices'
+    printf 'Logs(RAM): %s\n' "$out"
+    printf '%s\n' 'GOOD/FAIR/BAD: measured scope only. N-A/UNTESTED do not mean PASS.' 'Press Enter after taking a photo'
+} | summary_width > "$out/summary.txt"
 # ANSI の消去は端末だけ。要約ファイルはプレーンテキスト。
 [ ! -t 1 ] || printf '\033[2J\033[H'
 cat "$out/summary.txt"

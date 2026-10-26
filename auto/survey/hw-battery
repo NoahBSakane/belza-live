@@ -4,14 +4,14 @@
 . "$(dirname "$0")/hw-common.sh"
 dir=$HW_SYSFS/class/power_supply
 
-echo "== 電池調査 $(date '+%F %T') =="
-echo "カーネル: $(read_value "$HW_PROC/sys/kernel/osrelease")"
-echo "機種: $(cat "$HW_SYSFS/class/dmi/id/product_name" 2>/dev/null || echo '?') / $(cat "$HW_SYSFS/class/dmi/id/product_version" 2>/dev/null || echo '?')"
+echo "== Battery survey $(date '+%F %T') =="
+echo "Kernel: $(read_value "$HW_PROC/sys/kernel/osrelease")"
+echo "Model: $(cat "$HW_SYSFS/class/dmi/id/product_name" 2>/dev/null || echo '?') / $(cat "$HW_SYSFS/class/dmi/id/product_version" 2>/dev/null || echo '?')"
 echo "BIOS: $(cat "$HW_SYSFS/class/dmi/id/bios_version" 2>/dev/null || echo '?') ($(cat "$HW_SYSFS/class/dmi/id/bios_date" 2>/dev/null || echo '?'))"
 
 echo
-echo "== power_supply の一覧 =="
-ls "$dir" 2>/dev/null || echo "(読めない: $dir)"
+echo "== power_supply list =="
+ls "$dir" 2>/dev/null || echo "(unreadable: $dir)"
 
 found=0
 for bat in "$dir"/BAT*; do
@@ -19,58 +19,58 @@ for bat in "$dir"/BAT*; do
     found=1
     name=${bat##*/}
     echo
-    echo "== $name の全項目(uevent) =="
-    cat "$bat/uevent" 2>/dev/null || echo "(uevent が読めない)"
+    echo "== $name all fields (uevent) =="
+    cat "$bat/uevent" 2>/dev/null || echo "(uevent unreadable)"
     echo
-    echo "== $name の主な項目 =="
+    echo "== $name main fields =="
     for item in manufacturer model_name serial_number technology status capacity cycle_count \
                 energy_full energy_full_design energy_now charge_full charge_full_design charge_now \
                 voltage_now voltage_min_design current_now power_now temp; do
         if [ -r "$bat/$item" ]; then
             printf '%-20s %s\n' "$item" "$(cat "$bat/$item" 2>/dev/null)"
         else
-            printf '%-20s %s\n' "$item" "(無い)"
+            printf '%-20s %s\n' "$item" "(missing)"
         fi
     done
     # 健康度 = 満充電容量 / 設計容量。energy_* (µWh) があればそれを、無ければ charge_* (µAh) を使う。
     full=""; design=""; unit=""
     if [ -r "$bat/energy_full" ] && [ -r "$bat/energy_full_design" ]; then
-        full=$(cat "$bat/energy_full"); design=$(cat "$bat/energy_full_design"); unit="µWh"
+        full=$(cat "$bat/energy_full"); design=$(cat "$bat/energy_full_design"); unit="uWh"
     elif [ -r "$bat/charge_full" ] && [ -r "$bat/charge_full_design" ]; then
-        full=$(cat "$bat/charge_full"); design=$(cat "$bat/charge_full_design"); unit="µAh"
+        full=$(cat "$bat/charge_full"); design=$(cat "$bat/charge_full_design"); unit="uAh"
     fi
     echo
     if [ -n "$full" ] && [ -n "$design" ] && [ "$design" -gt 0 ] 2>/dev/null; then
         awk -v f="$full" -v d="$design" -v u="$unit" -v n="$name" 'BEGIN {
             h = f / d * 100
-            printf "%s 健康度: %.1f%% (満充電 %d %s / 設計 %d %s)\n", n, h, f, u, d, u
-            if (u == "µWh") printf "使える量の目安: 満充電 %.1f Wh / 設計 %.1f Wh\n", f/1e6, d/1e6
-            if      (h >= 70) v = "70% 以上: そのまま使える目安"
-            else if (h >= 30) v = "30〜70%: 安全停止の時間を計算し、実放電テストで確かめる"
-            else              v = "30% 未満: 交換か AC のみ(外部 UPS)を検討"
-            print "判定の目安(出典の無い基準): " v
-            if (h < 70) print "注意: 電池の健康度が70%未満"
+            printf "%s health: %.1f%% (full %d %s / design %d %s)\n", n, h, f, u, d, u
+            if (u == "uWh") printf "Capacity HINT: full %.1f Wh / design %.1f Wh\n", f/1e6, d/1e6
+            if      (h >= 70) v = ">=70%: HINT usable as-is"
+            else if (h >= 30) v = "30-70%: calculate shutdown time; verify with a discharge test"
+            else              v = "<30%: consider replacement or AC only (external UPS)"
+            print "Rating HINT (unsourced thresholds): " v
+            if (h < 70) print "WARN: battery health below 70%"
         }'
     else
-        echo "$name 健康度: 計算できない(満充電容量と設計容量の項目が読めない)"
+        echo "$name health: N-A (full/design capacity unreadable)"
     fi
     if [ -r "$bat/cycle_count" ] && [ "$(cat "$bat/cycle_count")" = "0" ]; then
-        echo "注: cycle_count が 0 のときは「情報なし」の意味のことがある"
+        echo "HINT: cycle_count 0 can mean no data"
     fi
     echo
-    echo "== $name の充電しきい値の項目 =="
+    echo "== $name charge threshold fields =="
     threshold=0
     for f in "$bat"/charge_control* "$bat"/charge_start* "$bat"/charge_stop* "$bat"/charge_behaviour; do
         [ -e "$f" ] || continue
         threshold=1
         printf '%-28s %s\n' "${f##*/}" "$(cat "$f" 2>/dev/null)"
     done
-    [ "$threshold" = 1 ] || echo "(無い: 充電しきい値は、この電池では設定できないとみる)"
+    [ "$threshold" = 1 ] || echo "(missing: charge threshold control appears unsupported)"
 done
-[ "$found" = 1 ] || echo "BAT* が見つからない(電池が付いていない、または認識されていない)"
+[ "$found" = 1 ] || echo "No BAT* found (battery absent or not detected)"
 
 echo
-echo "== AC アダプタ =="
+echo "== AC adapter =="
 for ac in "$dir"/AC* "$dir"/ADP*; do
     [ -d "$ac" ] || continue
     printf '%s online=%s\n' "${ac##*/}" "$(cat "$ac/online" 2>/dev/null || echo '?')"
@@ -81,10 +81,10 @@ for tool in "upower -i /org/freedesktop/UPower/devices/battery_BAT0" "acpi -V" "
     echo
     echo "== $tool =="
     if command -v "$cmd" >/dev/null 2>&1; then
-        sh -c "$tool" 2>&1 || echo "(失敗。tlp-stat は sudo が要ることがある: sudo $tool)"
+        sh -c "$tool" 2>&1 || echo "(failed; tlp-stat may need sudo: sudo $tool)"
     else
         missing "$cmd"
     fi
 done
 echo
-echo "== 完了(読み取りだけ。電池・設定は変えていない) =="
+echo "== Done (read only; battery/settings unchanged) =="

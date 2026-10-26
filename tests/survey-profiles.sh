@@ -91,17 +91,17 @@ for pid in edge14-0578 g560; do
     "$S/survey" < /dev/null > "$WORK/$pid-short"
     lacks "$MOCK_LOG" 'smartctl -t '
     lacks "$MOCK_LOG" 'memtester '
-    has "$WORK/$pid-short" 'SMART long / メモリ実試験: 未試験'
+    has "$WORK/$pid-short" 'SMART long / RAM test: UNTESTED'
     : > "$MOCK_LOG"
     "$S/survey" --long < /dev/null > "$WORK/$pid-summary"
     has "$WORK/$pid-summary" "/ $pid =="
-    has "$WORK/$pid-summary" 'BAT0: 可 60.0%'
-    has "$WORK/$pid-summary" 'ディスク sda: 不可'
+    has "$WORK/$pid-summary" 'BAT0: FAIR 60.0%'
+    has "$WORK/$pid-summary" 'Disk sda: BAD'
     has "$WORK/$pid-summary" '197=4'
-    has "$WORK/$pid-summary" '中央値 100.00 MB/s'
-    has "$WORK/$pid-summary" 'メモリ実試験: 良'
-    has "$WORK/$pid-summary" 'SMART long sda: 良'
-    has "$WORK/$pid-summary" '冷却: 良'
+    has "$WORK/$pid-summary" 'median 100.00 MB/s'
+    has "$WORK/$pid-summary" 'RAM test: GOOD'
+    has "$WORK/$pid-summary" 'SMART long sda: GOOD'
+    has "$WORK/$pid-summary" 'Cooling: GOOD'
     has "$MOCK_LOG" 'memtester 1024M 1'
     has "$MOCK_LOG" 'swapoff -a'
     has "$MOCK_LOG" 'stress-ng --cpu 2 --timeout 180s'
@@ -112,14 +112,14 @@ for pid in edge14-0578 g560; do
         lacks "$MOCK_LOG" "dd if=/dev/$excluded "
     done
     if [ "$pid" = edge14-0578 ]; then
-        has "$WORK/$pid-summary" 'PCI: 良'; has "$WORK/$pid-summary" 'TrackPoint: 可'
+        has "$WORK/$pid-summary" 'PCI: GOOD'; has "$WORK/$pid-summary" 'TrackPoint: FAIR'
     else
         has "$WORK/$pid-summary" 'GPU=DIS SATA=IDE'
-        has "$WORK/$pid-summary" '既知の VBIOS'
-        has "$WORK/$pid-summary" '速度=100Mb/s'
-        lacks "$WORK/$pid-summary" 'TrackPoint: 不可'
+        has "$WORK/$pid-summary" 'known VBIOS'
+        has "$WORK/$pid-summary" 'Speed=100Mb/s'
+        lacks "$WORK/$pid-summary" 'TrackPoint: BAD'
     fi
-    logdir=$(sed -n 's/^詳細(RAM): //p' "$WORK/$pid-summary")
+    logdir=$(sed -n 's/^Survey: .*; logs: //p' "$WORK/$pid-summary")
     [ "$(wc -l < "$logdir/summary.txt")" -le 40 ] || fail 'プロファイルの要約が40行超過'
     has "$logdir/memory.txt" 'Part Number: FIXTURE-4GB'
 done
@@ -127,29 +127,60 @@ done
 echo 37500000 > "$HW_SYSFS/class/power_supply/BAT0/energy_full"
 : > "$MOCK_LOG"
 MOCK_HOT=1 "$S/survey" --profile edge14-0578 < /dev/null > "$WORK/hot"
-has "$WORK/hot" 'BAT0: 良 75.0%'
-has "$WORK/hot" '冷却: 不可候補'
+has "$WORK/hot" 'BAT0: GOOD 75.0%'
+has "$WORK/hot" 'Cooling: BAD-CANDIDATE'
 lacks "$MOCK_LOG" 'stress-ng --cpu'
 echo 24500000 > "$HW_SYSFS/class/power_supply/BAT0/energy_full"
 # 期待値と違う G560 は不合格にせず、実測値を更新材料にする。
 echo 'unknown PCI' > "$HW_PROC/pci"
 "$S/survey" --profile g560 < /dev/null > "$WORK/g560-different"
-has "$WORK/g560-different" '初期値と違う(要更新)'
-has "$WORK/g560-different" 'GPU=未取得 SATA=未取得'
-has "$WORK/g560-different" 'BAT0: 不可 49.0%'
+has "$WORK/g560-different" 'HINT mismatch (update needed)'
+has "$WORK/g560-different" 'GPU=N-A SATA=N-A'
+has "$WORK/g560-different" 'BAT0: BAD 49.0%'
 echo UNKNOWN > "$HW_SYSFS/class/dmi/id/product_name"
 echo UNKNOWN > "$HW_SYSFS/class/dmi/id/product_version"
 echo UNKNOWN > "$HW_SYSFS/class/dmi/id/product_family"
 # 欠けたセンサーの扱い(本物へフォールバックしない)。
-printf '#!/bin/sh\necho "未取得: sensorsなし"\n' > "$WORK/bin/sensors"
+printf '#!/bin/sh\necho "N-A: sensors missing"\n' > "$WORK/bin/sensors"
 "$S/survey" < /dev/null > "$WORK/generic-summary"
 has "$WORK/generic-summary" '/ generic =='
-has "$WORK/generic-summary" '冷却: 未試験'
+has "$WORK/generic-summary" 'Cooling: UNTESTED'
+"$S/survey" --profile generic --long < /dev/null > "$WORK/generic-long"
+has "$WORK/generic-long" 'RAM test: GOOD'
+has "$WORK/generic-long" 'SMART long sda: N-A'
+lacks "$WORK/generic-long" 'SMART long sda: GOOD'
 MOCK_FS=ext4 "$S/survey" --profile generic < /dev/null > "$WORK/ram-refused" 2>&1 && fail 'survey がディスク出力を許可'
-has "$WORK/ram-refused" 'RAM 保存先'
+has "$WORK/ram-refused" 'RAM output directory'
 "$S/survey" --list > "$WORK/profiles"
 for pid in edge14-0578 g560 generic; do has "$WORK/profiles" "$pid"; done
-if "$S/survey" --profile '../../invalid' > /dev/null 2>&1; then fail '不明プロファイルを許可'; fi
+if "$S/survey" --profile '../../invalid' > "$WORK/invalid-profile" 2>&1; then fail '不明プロファイルを許可'; fi
+# usage とエラーは終了コードも照合し、出力を ASCII 検査へ渡す。
+error_case() {
+    expected=$1; name=$2; shift 2
+    status=0
+    "$@" < /dev/null > "$WORK/error-$name" 2>&1 || status=$?
+    [ "$status" = "$expected" ] || fail "$name: status $status, expected $expected"
+}
+error_case 2 survey-usage "$S/survey" --unknown
+has "$WORK/error-survey-usage" 'Usage: survey'
+error_case 2 survey-profile-value "$S/survey" --profile
+error_case 2 survey-profile-invalid "$S/survey" --profile invalid
+has "$WORK/error-survey-profile-invalid" 'Unknown profile'
+error_case 2 hw-usage "$S/hw-survey" --unknown
+has "$WORK/error-hw-usage" 'Usage: hw-survey'
+error_case 2 hw-out-value "$S/hw-survey" --out
+error_case 2 hw-mb-value "$S/hw-survey" --mb
+error_case 2 hw-path "$S/hw-survey" --out "$WORK/./invalid"
+error_case 1 hw-existing "$S/hw-survey" --out "$WORK/report"
+has "$WORK/error-hw-existing" 'Output already exists'
+error_case 2 speed-usage "$S/hw-disk-speed" --mb
+has "$WORK/error-speed-usage" 'Usage: hw-disk-speed'
+for value in invalid 0 2147483648; do
+    error_case 2 "hw-mb-$value" "$S/hw-survey" --mb "$value"
+    error_case 2 "speed-mb-$value" "$S/hw-disk-speed" --mb "$value"
+done
+"$S/hw-disk-speed" unknown > "$WORK/speed-excluded" 2>&1
+has "$WORK/speed-excluded" 'unknown: excluded'
 # sudo の再実行引数(元のコマンドは実行せず記録だけする)。
 printf '#!/bin/sh\necho 1000\n' > "$WORK/bin/id"
 # shellcheck disable=SC2016
@@ -157,4 +188,4 @@ printf '#!/bin/sh\nprintf "sudo %%s\\n" "$*" >> "$MOCK_LOG"\n' > "$WORK/bin/sudo
 chmod +x "$WORK/bin/sudo"
 "$S/survey" --profile g560 --long > /dev/null
 has "$MOCK_LOG" 'survey --profile g560 --long'
-echo 'PASS: Edge/G560/generic、期待値・SMART不可・長時間・40行・除外・未取得・sudo'
+echo 'PASS: Edge/G560/generic, expectations, SMART BAD, long, exclusions, N-A, sudo, usage/errors'

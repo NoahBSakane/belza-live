@@ -1,6 +1,6 @@
 # 実機を Live USB から検査する
 
-ディスクに書き込む検査をせず、機種・電池・SMART・入力・表示・冷却の情報を集める。自動で取得できた範囲を「良・可・不可」で示し、情報が無ければ「未取得」、動作を試していなければ「未試験」とする。認識しただけの入力機器やポートを動作確認済みとは扱わない。
+ディスクに書き込む検査をせず、機種・電池・SMART・入力・表示・冷却の情報を集める。画面とログは日本語フォントのない tty でも読める ASCII 英語で表示する。自動で取得できた範囲を `GOOD`(良)・`FAIR`(可)・`BAD`(不可)で示し、情報が無ければ `N-A`(未取得)、動作を試していなければ `UNTESTED`(未試験)とする。`N-A`・`UNTESTED` は合格を意味しない。注意は `WARN`、目安は `HINT`、手動確認は `MANUAL`、目視・照合は `CHECK` と表示する。認識しただけの入力機器やポートを動作確認済みとは扱わない。
 
 ## 準備と起動
 
@@ -39,26 +39,26 @@ survey --long
 
 ## 撮影とログ
 
-撮影するのは検査終了時の要約画面。要約は 40 行以内で、機器が多い場合は残りを詳細ログに残す。例は表示項目を抜粋した架空の値で、実測結果ではない。
+撮影するのは検査終了時の要約画面。要約は 1 行 80 桁・全体 40 行以内で、長い行の末尾は `...` で省略し、全文は `summary-body.txt` と詳細ログに残す。機器が多い場合は残りを詳細ログに残す。長い `disk-guard.sh --expect` のコマンドは詳細ログの参照先を表示する。例は表示項目を抜粋した架空の値で、実測結果ではない。
 
 ```text
 == ThinkPad Edge 14 / 0578 / edge14-0578 ==
-機種: 0578TEST / ThinkPad Edge / ThinkPad Edge
+Model: 0578TEST / ThinkPad Edge / ThinkPad Edge
 CPU: Intel Core i5
-BIOS: 80ET65WW (可; レガシーでは EFI variables 非対応は正常)
-PCI: 良 (期待値一致)
-BAT1: 可 60.0% 設計 47.52Wh (設計目安 47.52Wh; cycle不使用)
-メモリ: 4.00 GiB / 1067 MT/s / 可 (1067MT/s 前後は目安)
-ディスク sda: 可 5=0 197=0 198=0 SATA:3.0Gb/s
-sda: 中央値 85.00 MB/s (目安: 可)
-冷却: 良 idle=52/最大=75°C (idle45〜65目安、crit=100)
-SMART long / メモリ実試験: 未試験 (--longで追加)
-手動: CMOS 電池・HDD/Supervisor パスワード
-目視: ドット抜け[ ] ヒンジ[ ] キー打鍵[ ] ファン音[ ]
-ポート: eSATA / ExpressCard / VGA / HDMI は機器なしなら未試験
-詳細(RAM): /run/survey.XXXXXX
-良/可/不可は取得範囲の判定。未取得・未試験は合格ではない
-撮影後 Enter で戻る
+BIOS: 80ET65WW (FAIR; legacy: no EFI variables is normal)
+PCI: GOOD (expected IDs match)
+BAT1: FAIR 60.0% design 47.52Wh (HINT 47.52Wh; no cycle rating)
+Memory: 4.00 GiB / 1067 MT/s/ / FAIR (HINT ~1067MT/s) (slots/parts in logs)
+Disk sda: FAIR  5=0 197=0 198=0  SATA:3.0Gb/s (HINT 3.0Gb/s) Security sda: ...
+sda: median 85.00 MB/s (HINT: FAIR; HDD 5400:70-110 / 7200:100-130)
+Cooling: GOOD idle=52/max=75C (HINT 45-65; crit=100) MHz=N-A-N-A
+SMART long / RAM test: UNTESTED (enable with --long)
+MANUAL: CMOS battery / HDD and Supervisor passwords
+CHECK: dead pixels[ ] hinges[ ] keys[ ] fan noise[ ]
+Ports: eSATA / ExpressCard / VGA / HDMI UNTESTED without devices
+Logs(RAM): /run/survey.XXXXXX
+GOOD/FAIR/BAD: measured scope only. N-A/UNTESTED do not mean PASS.
+Press Enter after taking a photo
 ```
 
 ログの保存先は画面に表示する `/run/survey.XXXXXX/`。保存先が tmpfs・ramfs・overlay であることを作成前に確認する。それ以外や判定不能なら中止する。電源を切るとログは失われる。スロットごとの Size・Speed・Part Number、SMART の属性、無線の帯域、Security、センサーの詳細はログで読む。
@@ -77,7 +77,7 @@ SMART long / メモリ実試験: 未試験 (--longで追加)
 - ATA Security の locked は不可。enabled と frozen も記録し、frozen は正常として扱う。解除やパスワードの設定はしない。
 - 読み出し速度の中央値が 40MB/s 未満なら不可という目安。5400rpm の 70〜110MB/s、7200rpm の 100〜130MB/s は推測。SSD の上限としては使わない。SATA の 3.0Gb/s、メモリの 1067MT/s 前後、アイドルの 45〜65°C も目安で、取得値と一緒に読む。800MT/s、`limiting speed`、PIO は注意として記録する。
 - 電池の満充電容量 / 設計容量が 70%以上なら良、50〜69%なら可、50%未満なら不可。これも利用判断の目安であり推測。sysfs の設計値を優先し、設計値が無ければ健康度を計算しない。
-- PCI や BIOS の期待値との不一致は故障と断定しない。G560 は「初期値と違う(要更新)」と表示し、実測値を更新材料にする。
+- PCI や BIOS の期待値との不一致は故障と断定しない。G560 は `HINT mismatch (update needed)`(初期値と違う・要更新)と表示し、実測値を更新材料にする。
 
 ## 機種ごとの注意
 
@@ -91,4 +91,4 @@ CMOS 電池・HDD/Supervisor パスワードは Linux から確実には分か�
 
 書き込む検査(`badblocks -w/-n`、fio の write、`stress-ng --hdd`、`nvme format`、`dd of=/dev/…`)、ATA Security 操作、BIOS 更新、SATA モード変更をこの手順に足さない。安全モードはハードウェアの書き込み防止装置ではなく、管理者が別のコマンドを実行したときの書き込みまでは防がない。
 
-ISO のビルド、QEMU、実機での自動起動と日本語画面の表示は未検証。
+この変更を含む ISO のビルド、QEMU、実機での自動起動と画面表示は未検証。

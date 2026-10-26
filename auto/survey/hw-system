@@ -1,25 +1,25 @@
 #!/bin/sh
 # shellcheck source=auto/survey/hw-common.sh
 . "$(dirname "$0")/hw-common.sh"
-printf '機種: %s / %s\n' "$(read_value "$HW_SYSFS/class/dmi/id/product_name")" "$(read_value "$HW_SYSFS/class/dmi/id/product_version")"
+printf 'Model: %s / %s\n' "$(read_value "$HW_SYSFS/class/dmi/id/product_name")" "$(read_value "$HW_SYSFS/class/dmi/id/product_version")"
 printf 'BIOS: %s (%s)\n' "$(read_value "$HW_SYSFS/class/dmi/id/bios_version")" "$(read_value "$HW_SYSFS/class/dmi/id/bios_date")"
 if [ -r "$HW_PROC/cpuinfo" ]; then
     awk -F ': *' '/^(model name|Hardware)[[:space:]]*:/ {print "CPU: " $2; exit}' "$HW_PROC/cpuinfo"
     flags=$(sed -n 's/^flags[[:space:]]*: *//p' "$HW_PROC/cpuinfo" | head -n 1)
     for flag in aes sse4_2 popcnt vmx lm; do
-        if printf ' %s ' "$flags" | grep -q " $flag "; then value=有; else value=無; fi
-        printf 'CPU 機能 %s: %s\n' "$flag" "$value"
+        if printf ' %s ' "$flags" | grep -q " $flag "; then value=YES; else value=NO; fi
+        printf 'CPU feature %s: %s\n' "$flag" "$value"
     done
-else printf '%s\n' 'CPU: 未取得: cpuinfoなし'; fi
+else printf '%s\n' 'CPU: N-A: cpuinfonone'; fi
 if [ -r "$HW_PROC/meminfo" ]; then
-    awk '/^MemTotal:/ {printf "メモリ: %.2f GiB (%s kB)\n",$2/1048576,$2}' "$HW_PROC/meminfo"
-else printf '%s\n' 'メモリ: 未取得: meminfoなし'; fi
+    awk '/^MemTotal:/ {printf "Memory: %.2f GiB (%s kB)\n",$2/1048576,$2}' "$HW_PROC/meminfo"
+else printf '%s\n' 'Memory: N-A: meminfonone'; fi
 if command -v dmidecode >/dev/null 2>&1; then
     dmidecode -t memory 2>/dev/null | awk '
-        /^Memory Device$/ {print "メモリスロット:"; next}
+        /^Memory Device$/ {print "Memory slot:"; next}
         /^[ \t]*(Size|Locator|Bank Locator|Type|Speed|Configured Memory Speed|Part Number):/ {sub(/^[ \t]*/, ""); print "  " $0}'
 else missing dmidecode; fi
 if [ -r "$HW_PROC/sys/kernel/osrelease" ]; then
-    printf 'カーネル: %s\n' "$(read_value "$HW_PROC/sys/kernel/osrelease")"
-elif command -v uname >/dev/null 2>&1; then printf 'カーネル: %s\n' "$(uname -r)"
+    printf 'Kernel: %s\n' "$(read_value "$HW_PROC/sys/kernel/osrelease")"
+elif command -v uname >/dev/null 2>&1; then printf 'Kernel: %s\n' "$(uname -r)"
 else missing uname; fi

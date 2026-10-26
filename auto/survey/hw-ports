@@ -7,7 +7,7 @@ else missing lspci; fi
 if command -v lsusb >/dev/null 2>&1; then lsusb -t 2>&1; else missing lsusb; fi
 if command -v dmesg >/dev/null 2>&1; then
     if messages=$(dmesg 2>&1); then printf '%s\n' "$messages" | grep -Ei 'ata|sata|link up|link down|usb|expresscard|pcieport' | tail -n 60
-    else printf '未取得: dmesg (%s)\n' "$messages"; fi
+    else printf 'N-A: dmesg (%s)\n' "$messages"; fi
 else missing dmesg; fi
 command -v ethtool >/dev/null 2>&1 || missing ethtool
 for nic in "$HW_SYSFS"/class/net/*; do
@@ -20,5 +20,5 @@ for nic in "$HW_SYSFS"/class/net/*; do
         v=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Speed: *//p'); [ -z "$v" ] || speed=$v
         v=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Duplex: *//p'); [ -z "$v" ] || duplex=$v
     fi
-    printf 'NIC %s: リンク=%s 速度=%s duplex=%s\n' "$name" "$link" "$speed" "$duplex"
+    printf 'NIC %s: link=%s Speed=%s duplex=%s\n' "$name" "$link" "$speed" "$duplex"
 done

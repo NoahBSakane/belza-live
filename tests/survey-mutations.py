@@ -10,6 +10,14 @@ from concurrent.futures import ThreadPoolExecutor
 root = Path(__file__).resolve().parent.parent
 (root / '.agent-handoff').mkdir(exist_ok=True)
 mutations = {
+    'non-ascii-summary': ('survey', 'Press Enter after taking a photo',
+                          'Press Enter after taking a photo 日本語',
+                          'non-ASCII output:'),
+    'non-ascii-error': ('survey', 'Unknown profile', 'Unknown profile 日本語',
+                        'non-ASCII output:'),
+    'non-ascii-list': ('survey', "printf '%s\\n' edge14-0578 g560 generic; exit 0",
+                       "printf '%s\\n' edge14-0578 g560 generic 日本語; exit 0",
+                       'non-ASCII output:'),
     'boot-exclusion': ('hw-common.sh', 'is_boot "$candidate" && continue', ':',
                        'smartctl -t long /dev/sde が残る'),
     'usb-exclusion': ('hw-common.sh', '[ "$(connection "$candidate")" != usb ] || continue', ':',

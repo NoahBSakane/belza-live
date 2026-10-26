@@ -6,70 +6,74 @@ out=; speed=0; mb=512; allow_disk=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --out|--mb)
-            [ $# -ge 2 ] || { echo 'オプションの値がない' >&2; exit 2; }
+            [ $# -ge 2 ] || { echo 'Missing option value' >&2; exit 2; }
             if [ "$1" = --out ]; then out=$2; else mb=$2; fi; shift 2 ;;
         --speed) speed=1; shift ;;
         --allow-disk) allow_disk=1; shift ;;
-        *) echo '使い方: hw-survey [--out DIR] [--speed] [--mb N] [--allow-disk]' >&2; exit 2 ;;
+        *) echo 'Usage: hw-survey [--out DIR] [--speed] [--mb N] [--allow-disk]' >&2; exit 2 ;;
     esac
 done
-case "$mb" in ''|*[!0-9]*) echo 'N は正の整数で指定する' >&2; exit 2 ;; esac
+case "$mb" in ''|*[!0-9]*) echo 'N must be a positive integer' >&2; exit 2 ;; esac
 [ "$mb" -gt 0 ] 2>/dev/null && [ "$mb" -le 2147483647 ] 2>/dev/null || exit 2
 out=${out:-/tmp/hw-survey-$(date '+%Y%m%d-%H%M%S')}
 # 存在する最も近い親で、作成前にファイルシステムを調べる。
 case "$out" in /*) ;; *) out=$PWD/$out ;; esac
-case "$out/" in */../*|*/./*) echo '保存先に . や .. は使えない' >&2; exit 2 ;; esac
+case "$out/" in */../*|*/./*) echo 'Output path must not contain . or ..' >&2; exit 2 ;; esac
 parent=$out
 while [ ! -e "$parent" ]; do parent=$(dirname "$parent"); done
 if command -v findmnt >/dev/null 2>&1; then
     fs=$(findmnt -n -o FSTYPE -T "$parent" 2>/dev/null)
-else missing findmnt; fs=不明; fi
+else missing findmnt; fs=N-A; fi
 case "$fs" in
     tmpfs|ramfs|overlay) ;;
     *)
-        printf '警告: ディスクに書くことになる (保存先: %s、種類: %s)。--allow-disk が必要\n' "$out" "${fs:-不明}" >&2
+        printf 'WARN: would write to disk (path: %s, type: %s); --allow-disk required\n' "$out" "${fs:-N-A}" >&2
         [ "$allow_disk" = 1 ] || exit 1 ;;
 esac
 # 既存ログ・シンボリックリンクを上書きしない。
-if [ -e "$out" ] || [ -L "$out" ]; then echo '保存先が既に存在する。新しい DIR を指定する' >&2; exit 1; fi
+if [ -e "$out" ] || [ -L "$out" ]; then echo 'Output already exists; choose a new DIR' >&2; exit 1; fi
 (umask 077; mkdir -p "$out") || exit 1
 for tool in hw-system hw-disks hw-ports hw-battery disk-guard-suggest; do
     if ! "$scripts/$tool" > "$out/$tool.txt" 2>&1; then
-        printf '未取得: %s の実行失敗\n' "$tool" >> "$out/$tool.txt"
+        printf 'N-A: %s failed\n' "$tool" >> "$out/$tool.txt"
     fi
 done
 if [ "$speed" = 1 ]; then
-    "$scripts/hw-disk-speed" --mb "$mb" > "$out/hw-disk-speed.txt" 2>&1 || printf '%s\n' '未取得: 速度測定の実行失敗' >> "$out/hw-disk-speed.txt"
+    "$scripts/hw-disk-speed" --mb "$mb" > "$out/hw-disk-speed.txt" 2>&1 || printf '%s\n' 'N-A: speed test failed' >> "$out/hw-disk-speed.txt"
 fi
 # 要約は取得済みのログから作る(SMART を二重に問い合わせない)。
 {
-    printf '%s\n' '== 実機調査の要約 (注意: !、詳細は保存先) =='
-    grep -E '^(機種:|BIOS:|CPU:|メモリ:)' "$out/hw-system.txt"
+    printf '%s\n' '== Hardware survey (! = WARN; see logs for details) =='
+    grep -E '^(Model:|BIOS:|CPU:|Memory:)' "$out/hw-system.txt"
     awk '
         function emit() {
             if(d=="") return
-            tail=serial=="不明"?serial:substr(serial,length(serial)>6?length(serial)-5:1)
-            mark=""; if (attention != "なし") mark=" !" attention
-            printf "%s %s SN末尾:%s %s %s %s SMART:%s 時間:%s%s\n",d,model,tail,size,conn,link,health,hours,mark
+            tail=serial=="N-A"?serial:substr(serial,length(serial)>6?length(serial)-5:1)
+            mark=""; if (attention != "none") mark=" !" attention
+            printf "%s %s SN-tail:%s %s %s %s\n",d,model,tail,size,conn,link
+            printf "  SMART:%s%s hours:%s\n",health,mark,hours
         }
-        /^ディスク:/ {emit(); d=$0; sub(/^ディスク: /,"",d)}
-        /^型番:/ {model=$0; sub(/^[^:]*: /,"",model)}
-        /^シリアル:/ {serial=$0; sub(/^[^:]*: /,"",serial)}
-        /^容量:/ {size=$0; sub(/^[^:]*: /,"",size); sub(/ \/.*/,"",size)}
-        /^接続:/ {conn=$0; sub(/^[^:]*: /,"",conn)}
-        /^SATA リンク:/ {link=$0; sub(/^[^:]*: /,"",link)}
-        /^SMART 健康:/ {health=$0; sub(/^[^:]*: /,"",health)}
-        /^電源投入時間:/ {hours=$0; sub(/^[^:]*: /,"",hours)}
-        /^注意:/ {attention=$0; sub(/^[^:]*: /,"",attention)}
+        /^Disk:/ {emit(); d=$0; sub(/^Disk: /,"",d)}
+        /^Model:/ {model=$0; sub(/^[^:]*: /,"",model)}
+        /^Serial:/ {serial=$0; sub(/^[^:]*: /,"",serial)}
+        /^Size:/ {size=$0; sub(/^[^:]*: /,"",size); sub(/ \/.*/,"",size)}
+        /^Connection:/ {conn=$0; sub(/^[^:]*: /,"",conn)}
+        /^SATA link:/ {link=$0; sub(/^[^:]*: /,"",link)}
+        /^SMART health:/ {health=$0; sub(/^[^:]*: /,"",health)}
+        /^Power-on hours:/ {hours=$0; sub(/^[^:]*: /,"",hours)}
+        /^WARN:/ {attention=$0; sub(/^[^:]*: /,"",attention)}
         END {emit()}' "$out/hw-disks.txt"
     if [ "$speed" = 1 ]; then cat "$out/hw-disk-speed.txt"; fi
     grep '^NIC ' "$out/hw-ports.txt"
-    grep -E '健康度:|^注意:|^BAT\*| online=' "$out/hw-battery.txt"
+    grep -E 'health:|^WARN:|^BAT\*| online=' "$out/hw-battery.txt"
 } > "$out/summary-body.txt"
 {
-    awk 'NR<=36 {print} END {if(NR>36) printf "ほか %d 行は詳細ログを参照\n",NR-36}' "$out/summary-body.txt"
-    grep -E '^disk-guard.sh --expect |^対象案なし' "$out/disk-guard-suggest.txt"
-    printf '%s\n' '対象案は詳細の一覧表を人が確かめてから使う'
-    printf '保存先: %s\n' "$out"
-} > "$out/summary.txt"
+    awk 'NR<=36 {print} END {if(NR>36) printf "See logs for %d more lines\n",NR-36}' "$out/summary-body.txt"
+    awk '/^disk-guard.sh --expect / {
+        if(length($0)>80) print "disk-guard.sh --expect: see disk-guard-suggest.txt for full command"
+        else print
+    } /^No suggestion/ {print}' "$out/disk-guard-suggest.txt"
+    printf '%s\n' 'CHECK: verify the detailed disk table before using this suggestion'
+    printf 'Output: %s\n' "$out"
+} | summary_width > "$out/summary.txt"
 cat "$out/summary.txt"

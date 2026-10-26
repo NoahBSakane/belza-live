@@ -97,7 +97,9 @@ check_templates() {
             contains "$SESSION_LOG" 'shell -i'
         done
         printf '%s\n' 'bootkit.safe=10 bootkit.survey=g560' > "$WORK/session-cmdline"
-        if BOOTKIT_CMDLINE=$WORK/session-cmdline sh session-test.sh > /dev/null; then fail 'safeなしの自動検査を許可'; fi
+        if BOOTKIT_CMDLINE=$WORK/session-cmdline sh session-test.sh > "$WORK/session-unsafe" 2>&1; then fail 'safeなしの自動検査を許可'; fi
+        contains "$WORK/session-unsafe" 'ERROR: safe mode required; automatic survey stopped'
+        python3 "$HERE/tests/survey-ascii.py" "$WORK/session-unsafe"
     fi
     [ "$(grep -c "${tab}initrd @INITRD_LIVE@" "$grub/grub.cfg")" = "$expected_initrd" ] || fail '追加項目の initrd がない'
     contains "$grub/memtest.cfg" "${tab}${tab}linux @MEMTEST_DIR@/memtest.efi"

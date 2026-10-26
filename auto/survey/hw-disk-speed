@@ -3,16 +3,16 @@
 . "$(dirname "$0")/hw-common.sh"
 mb=512
 if [ "${1:-}" = --mb ]; then
-    [ $# -ge 2 ] || { echo '使い方: hw-disk-speed [--mb N] [デバイス...]' >&2; exit 2; }
+    [ $# -ge 2 ] || { echo 'Usage: hw-disk-speed [--mb N] [devices...]' >&2; exit 2; }
     mb=$2; shift 2
 fi
-case "$mb" in ''|*[!0-9]*) echo 'N は正の整数で指定する' >&2; exit 2 ;; esac
+case "$mb" in ''|*[!0-9]*) echo 'N must be a positive integer' >&2; exit 2 ;; esac
 [ "$mb" -gt 0 ] 2>/dev/null && [ "$mb" -le 2147483647 ] 2>/dev/null || exit 2
 command -v dd >/dev/null 2>&1 || { missing dd; exit 0; }
 command -v lsblk >/dev/null 2>&1 || missing lsblk
 BOOT_DISKS=$(boot_disks)
-if printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!起動媒体未判定'; then
-    printf '%s\n' '未取得: 起動媒体の親ディスク。安全のため対象案・測定を省略'
+if printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!BOOT-DISK-UNKNOWN'; then
+    printf '%s\n' 'N-A: boot disk parent; skipping suggestions and reads for safety'
     exit 0
 fi
 # マウント元の親が判定できない場合、起動媒体を誤って測らない。
@@ -21,10 +21,10 @@ fi
 if [ $# -eq 0 ]; then set -- $(disks); fi
 for arg do
     disk=${arg#/dev/}
-    if ! disks | grep -Fqx "$disk"; then printf '%s: 対象外\n' "$arg"; continue; fi
-    if is_boot "$disk"; then printf '%s: (起動媒体) 測定対象外\n' "$disk"; continue; fi
+    if ! disks | grep -Fqx "$disk"; then printf '%s: excluded\n' "$arg"; continue; fi
+    if is_boot "$disk"; then printf '%s: (boot media) read test excluded\n' "$disk"; continue; fi
     if ! internal_disks | grep -Fqx "$disk"; then
-        printf '%s: (USB・取り外し可能媒体) 測定対象外\n' "$disk"; continue
+        printf '%s: (USB/removable media) read test excluded\n' "$disk"; continue
     fi
     if [ "${HW_SPEED_METHOD:-dd}" = hdparm ]; then
         if ! command -v hdparm >/dev/null 2>&1; then missing hdparm; continue; fi
@@ -36,18 +36,18 @@ for arg do
             [ -n "$value" ] || { failed=1; break; }
             values="$values $value"
         done
-        if [ "$failed" = 1 ]; then printf '%s: 未取得: 読み出しエラー\n' "$disk"; continue; fi
+        if [ "$failed" = 1 ]; then printf '%s: N-A: read error\n' "$disk"; continue; fi
         printf '%s\n' "$values" | awk -v d="$disk" '{
             a=$1; b=$2; c=$3
             if(a>b){t=a;a=b;b=t} if(b>c){t=b;b=c;c=t} if(a>b){t=a;a=b;b=t}
-            printf "%s: 中央値 %.2f MB/s (目安: %s; HDD 5400rpm 70〜110 / 7200rpm 100〜130)\n",d,b,(b<40?"不可: 40未満":"可")
+            printf "%s: median %.2f MB/s (HINT: %s; HDD 5400:70-110 / 7200:100-130)\n",d,b,(b<40?"BAD: <40":"FAIR")
         }'
         continue
     fi
     sectors=$(read_value "$HW_SYSFS/block/$disk/size")
-    case "$sectors" in ''|*[!0-9]*) printf '%s: 読み出しエラー(容量不明)\n' "$disk"; continue ;; esac
+    case "$sectors" in ''|*[!0-9]*) printf '%s: read error (size unknown)\n' "$disk"; continue ;; esac
     total=$((sectors / 2048))
-    if [ "$total" -lt "$mb" ]; then printf '%s: 読み出しエラー(指定量より小さい)\n' "$disk"; continue; fi
+    if [ "$total" -lt "$mb" ]; then printf '%s: read error (smaller than requested size)\n' "$disk"; continue; fi
     end=$((total - mb)); middle=$((end / 2))
     values=; failed=0
     for position in 0 "$middle" "$end"; do
@@ -61,6 +61,6 @@ for arg do
             values="$values $speed"
         else failed=1; break; fi
     done
-    if [ "$failed" = 1 ]; then printf '%s: 読み出しエラー\n' "$disk"; continue; fi
-    printf '%s\n' "$values" | awk -v d="$disk" '{printf "%s: 先頭 %.2f / 中間 %.2f / 末尾 %.2f / 平均 %.2f MB/s\n",d,$1,$2,$3,($1+$2+$3)/3}'
+    if [ "$failed" = 1 ]; then printf '%s: read error\n' "$disk"; continue; fi
+    printf '%s\n' "$values" | awk -v d="$disk" '{printf "%s: start %.2f / middle %.2f / end %.2f / mean %.2f MB/s\n",d,$1,$2,$3,($1+$2+$3)/3}'
 done

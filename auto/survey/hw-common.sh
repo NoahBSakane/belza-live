@@ -7,10 +7,10 @@ read_value() {
     if [ -r "$1" ] && value=$(cat "$1" 2>/dev/null) && [ -n "$value" ]; then
         printf '%s' "$value" | tr '\n\t' '  ' | sed 's/^ *//;s/ *$//'
     else
-        printf '%s' 不明
+        printf '%s' N-A
     fi
 }
-missing() { printf '未取得: %sなし\n' "$1"; }
+missing() { printf 'N-A: %s missing\n' "$1"; }
 disks() {
     for blk in "$HW_SYSFS"/block/*; do
         [ -e "$blk" ] || continue
@@ -26,7 +26,7 @@ connection() {
         */nvme*) printf nvme ;;
         */ata*) printf ata ;;
         */virtio*) printf virtio ;;
-        *) printf 不明 ;;
+        *) printf N-A ;;
     esac
 }
 # Live のマウント元から祖先をたどる。mapper/ventoy やパーティションも含む。
@@ -44,7 +44,7 @@ boot_disks() {
     if [ -z "$sources" ] && command -v findmnt >/dev/null 2>&1; then
         sources=$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null) || :
     fi
-    [ -n "$sources" ] || { printf '%s\n' '!起動媒体未判定'; return; }
+    [ -n "$sources" ] || { printf '%s\n' '!BOOT-DISK-UNKNOWN'; return; }
     for source in $sources; do
         ancestors=
         if command -v lsblk >/dev/null 2>&1; then
@@ -59,14 +59,14 @@ boot_disks() {
                 resolved=1
             fi
         done
-        [ "$resolved" = 1 ] || printf '%s\n' '!起動媒体未判定'
+        [ "$resolved" = 1 ] || printf '%s\n' '!BOOT-DISK-UNKNOWN'
     done
     return 0
 }
 is_boot() { printf '%s\n' "$BOOT_DISKS" | grep -Fqx "$1"; }
 capacity() {
     sectors=$(read_value "$HW_SYSFS/block/$1/size")
-    awk -v s="$sectors" 'BEGIN {if(s ~ /^[0-9]+$/) printf "%.2f GB / %.2f GiB",s*512/1e9,s*512/1073741824; else printf "不明"}'
+    awk -v s="$sectors" 'BEGIN {if(s ~ /^[0-9]+$/) printf "%.2f GB / %.2f GiB",s*512/1e9,s*512/1073741824; else printf "N-A"}'
 }
 smart_data() {
     if ! command -v smartctl >/dev/null 2>&1; then missing smartctl; return; fi
@@ -79,7 +79,7 @@ smart_data() {
 }
 smart_health() {
     awk '/SMART overall-health.*result:|SMART Health Status:/ {sub(/^.*(result:|Status:)[ ]*/, ""); print; found=1; exit}
-        END {if(!found) print "不明"}'
+        END {if(!found) print "N-A"}'
 }
 sata_link() {
     sed -n 's/.*SATA Version.*current: *\([0-9.]*\) *Gb\/s.*/\1Gb\/s/p' | head -n 1
@@ -90,7 +90,7 @@ smart_attributes() {
         if(id==5||id==10||id==196||id==9||id==12||id==177||id==231||id==233||id==187||id==188||id==194||id==197||id==198||id==199||id==241||id==242) {
             raw=$10; for(i=11;i<=NF;i++) raw=raw " " $i
             warn=($6+0>0 && $4+0<=$6+0)||($9!="-" && $9!="")
-            printf "SMART %s %s: %s%s\n",id,$2,raw,warn?" [しきい値警告]":""
+            printf "SMART %s %s: %s%s\n",id,$2,raw,warn?" [threshold WARN]":""
         }
     }'
 }
@@ -98,11 +98,16 @@ smart_attributes() {
 # 自己診断・速度測定は共通で内蔵の固定媒体だけに限定する。
 internal_disks() {
     BOOT_DISKS=$(boot_disks)
-    printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!起動媒体未判定' && return 0
+    printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!BOOT-DISK-UNKNOWN' && return 0
     for candidate in $(disks); do
         is_boot "$candidate" && continue
         [ "$(connection "$candidate")" != usb ] || continue
         [ "$(read_value "$HW_SYSFS/block/$candidate/removable")" = 0 ] || continue
         printf '%s\n' "$candidate"
     done
+}
+
+# tty の要約は ASCII の 80 桁以内。長い行の全文は元のログに残す。
+summary_width() {
+    awk '{gsub(/\t/," "); if(length($0)>80) print substr($0,1,77) "..."; else print}'
 }

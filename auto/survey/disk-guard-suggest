@@ -3,19 +3,19 @@
 . "$(dirname "$0")/hw-common.sh"
 command -v lsblk >/dev/null 2>&1 || missing lsblk
 BOOT_DISKS=$(boot_disks)
-if printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!起動媒体未判定'; then
-    printf '%s\n' '未取得: 起動媒体の親ディスク。安全のため対象案・測定を省略'
+if printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!BOOT-DISK-UNKNOWN'; then
+    printf '%s\n' 'N-A: boot disk parent; skipping suggestions and reads for safety'
     exit 0
 fi
-printf '%s\n' 'これは今の実機の値から作った案。想定と違うディスクが混ざっていないか、人が一覧表で確かめてから使う'
-printf '%s\n' 'sdX の名前は起動のたびに変わりうる。by-id も照合する。' '名前 | 型番 | 容量 GB(整数) | MIN | MAX'
+printf '%s\n' 'CHECK: verify the disk table before using this measured suggestion'
+printf '%s\n' 'sdX names may change on boot; also compare by-id.' 'Name | Model | Size GB(integer) | MIN | MAX'
 expect=; invalid=0
 for disk in $(disks); do
     [ "$(connection "$disk")" != usb ] || continue
     [ "$(read_value "$HW_SYSFS/block/$disk/removable")" = 0 ] || continue
     is_boot "$disk" && continue
     sectors=$(read_value "$HW_SYSFS/block/$disk/size")
-    case "$sectors" in ''|*[!0-9]*) printf '%s: 未取得: 容量\n' "$disk"; invalid=1; continue ;; esac
+    case "$sectors" in ''|*[!0-9]*) printf '%s: N-A: Size\n' "$disk"; invalid=1; continue ;; esac
     gb=$((sectors * 512 / 1000000000))
     min=$((gb * 95 / 100)); max=$(((gb * 105 + 99) / 100))
     model=$(read_value "$HW_SYSFS/block/$disk/device/model")
@@ -27,14 +27,14 @@ for disk in $(disks); do
         target=$(readlink -f "$id" 2>/dev/null)
         if [ "${target##*/}" = "$disk" ]; then ids="$ids ${id##*/}"; fi
     done
-    printf '  by-id:%s\n' "${ids:- 不明}"
+    printf '  by-id:%s\n' "${ids:- N-A}"
     # guard の区切りとして解釈される型番は、安全な文字列で表現できない。
-    case "$token" in ''|不明|*:*|*,*) printf '%s\n' '未取得: guard に渡せる型番。案の生成を中止'; invalid=1; continue ;; esac
+    case "$token" in ''|N-A|*:*|*,*) printf '%s\n' 'N-A: model usable by guard; suggestion stopped'; invalid=1; continue ;; esac
     expect="${expect}${expect:+,}$disk:$min:$max:$token"
 done
 if [ -n "$expect" ] && [ "$invalid" = 0 ]; then
     escaped=$(printf '%s' "$expect" | sed "s/'/'\\\\''/g")
     printf "disk-guard.sh --expect '%s'\n" "$escaped"
 else
-    printf '%s\n' '対象案なし(内蔵ディスクが無いか情報不足)'
+    printf '%s\n' 'No suggestion (no internal disk or insufficient data)'
 fi

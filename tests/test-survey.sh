@@ -144,7 +144,7 @@ printf '%s\n' "$MOCK_FS"
 STUB
 # 電池の補助診断も実機・サービスへアクセスさせない。
 for cmd in upower acpi tlp-stat; do
-    printf '#!/bin/sh\nprintf "補助電池情報\\n"\n' > "$WORK/bin/$cmd"
+    printf '#!/bin/sh\nprintf "Auxiliary battery data\\n"\n' > "$WORK/bin/$cmd"
 done
 chmod +x "$WORK/bin/"* "$S/"*
 PATH=$WORK/bin:$PATH
@@ -167,30 +167,30 @@ if command -v shellcheck >/dev/null 2>&1; then
 fi
 "$S/hw-system" > "$WORK/system"
 has "$WORK/system" 'ThinkPad TEST'; has "$WORK/system" 'CPU: Fake CPU'
-has "$WORK/system" 'メモリ: 8.00 GiB'; has "$WORK/system" 'DDR3'; has "$WORK/system" 'CPU 機能 aes: 有'
+has "$WORK/system" 'Memory: 8.00 GiB'; has "$WORK/system" 'DDR3'; has "$WORK/system" 'CPU feature aes: YES'
 lacks "$WORK/system" SECRET-SYSTEM-SERIAL
 "$S/hw-disks" > "$WORK/disks"
 has "$WORK/disks" 'SanDisk SSD'; has "$WORK/disks" '240.06 GB / 223.57 GiB'
-has "$WORK/disks" 'SATA リンク: 6.0Gb/s'; has "$WORK/disks" 'SMART 健康: PASSED'
-has "$WORK/disks" 'SMART 5 Reallocated_Sector_Ct: 2 [しきい値警告]'
-has "$WORK/disks" 'SMART 241 Total_LBAs_Written: 999'; has "$WORK/disks" '電源投入時間: 1234'
-has "$WORK/disks" 'SATA低速'; has "$WORK/disks" 'SMART 健康: FAILED!';
-has "$WORK/disks" 'NVMe Percentage Used: 12%'; has "$WORK/disks" '電源投入時間: 321';
-has "$WORK/disks" '注意: 5=2'; has "$WORK/disks" 'ディスク: sde (起動媒体)'
+has "$WORK/disks" 'SATA link: 6.0Gb/s'; has "$WORK/disks" 'SMART health: PASSED'
+has "$WORK/disks" 'SMART 5 Reallocated_Sector_Ct: 2 [threshold WARN]'
+has "$WORK/disks" 'SMART 241 Total_LBAs_Written: 999'; has "$WORK/disks" 'Power-on hours: 1234'
+has "$WORK/disks" 'SATA-slow'; has "$WORK/disks" 'SMART health: FAILED!';
+has "$WORK/disks" 'NVMe Percentage Used: 12%'; has "$WORK/disks" 'Power-on hours: 321';
+has "$WORK/disks" 'WARN: 5=2'; has "$WORK/disks" 'Disk: sde (boot media)'
 has "$MOCK_LOG" 'smartctl -d sat -i -H -A /dev/sdc'
 [ "$(grep -c 'smartctl .* /dev/sdc$' "$MOCK_LOG")" = 2 ] || fail 'USB の再取得回数'
 "$S/hw-ports" > "$WORK/ports"
-has "$WORK/ports" CardBus; has "$WORK/ports" 'NIC eth0: リンク=yes 速度=1000Mb/s'
+has "$WORK/ports" CardBus; has "$WORK/ports" 'NIC eth0: link=yes Speed=1000Mb/s'
 if grep -q 'pcieport 4$' "$WORK/ports"; then fail 'dmesg が60行に絞れていない'; fi; has "$WORK/ports" 'pcieport 64'
 "$S/hw-battery" > "$WORK/battery"
-has "$WORK/battery" 'BAT0 健康度: 60.0%'; has "$WORK/battery" '注意: 電池の健康度が70%未満'
+has "$WORK/battery" 'BAT0 health: 60.0%'; has "$WORK/battery" 'WARN: battery health below 70%'
 has "$WORK/battery" 'charge_control_end_threshold'; has "$WORK/battery" 'AC online=1'
 "$S/disk-guard-suggest" > "$WORK/guard"
 has "$WORK/guard" 'sda | SanDisk SSD | 240 | 228 | 252'
 has "$WORK/guard" 'sdb | ST1000 HDD | 1000 | 950 | 1050'
 has "$WORK/guard" 'nvme0n1:486:538:NVME'
 has "$WORK/guard" "disk-guard.sh --expect 'nvme0n1:486:538:NVME,sda:228:252:SanDisk,sdb:950:1050:ST1000'"
-has "$WORK/guard" 'ata-sda'; has "$WORK/guard" '人が一覧表で確かめてから使う'
+has "$WORK/guard" 'ata-sda'; has "$WORK/guard" 'verify the disk table'
 for excluded in sdc sdd sde; do lacks "$WORK/guard" "$excluded:"; lacks "$WORK/guard" "$excluded |"; done
 # guard 本体と同じく、SCSI など接続種別が不明でも USB・removable・起動媒体でなければ含む。
 mkdisk sdf pci/host5 1953525168 0 'SCSI TEST' 1
@@ -210,19 +210,19 @@ sh "$WORK/quoted-command"
 has "$HW_PROC/quoted-expect" "sda:228:252:O'Neil"
 printf '%s\n' '  SanDisk SSD  ' > "$HW_SYSFS/block/sda/device/model"
 "$S/hw-disk-speed" --mb 128 > "$WORK/speed"
-has "$WORK/speed" 'sda: 先頭 67.11 / 中間 67.11 / 末尾 67.11 / 平均 67.11 MB/s'
+has "$WORK/speed" 'sda: start 67.11 / middle 67.11 / end 67.11 / mean 67.11 MB/s'
 for excluded in sdc sdd sde; do lacks "$MOCK_LOG" "dd if=/dev/$excluded "; done
 has "$MOCK_LOG" 'skip=114404 count=128'; has "$MOCK_LOG" 'skip=228808 count=128'
 "$S/hw-disk-speed" --mb 128 /dev/sde > "$WORK/boot-speed"
-has "$WORK/boot-speed" '(起動媒体) 測定対象外'
+has "$WORK/boot-speed" '(boot media) read test excluded'
 MOCK_DD_FAIL=1 "$S/hw-disk-speed" --mb 128 sda sdb > "$WORK/speed-fail"
-has "$WORK/speed-fail" 'sda: 読み出しエラー'; has "$WORK/speed-fail" 'sdb: 読み出しエラー'
+has "$WORK/speed-fail" 'sda: read error'; has "$WORK/speed-fail" 'sdb: read error'
 "$S/hw-survey" --out "$WORK/report" --speed --mb 128 > "$WORK/summary"
 [ "$(wc -l < "$WORK/summary")" -le 40 ] || fail '要約が40行を超えた'
-has "$WORK/summary" 'ThinkPad TEST'; has "$WORK/summary" 'SN末尾:123456'
-has "$WORK/summary" ' !5=2'; has "$WORK/summary" '平均 67.11 MB/s'
-has "$WORK/summary" 'NIC eth0:'; has "$WORK/summary" 'BAT0 健康度: 60.0%'
-has "$WORK/summary" "disk-guard.sh --expect '"
+has "$WORK/summary" 'ThinkPad TEST'; has "$WORK/summary" 'SN-tail:123456'
+has "$WORK/summary" ' !5=2'; has "$WORK/summary" 'mean 67.11 MB/s'
+has "$WORK/summary" 'NIC eth0:'; has "$WORK/summary" 'BAT0 health: 60.0%'
+has "$WORK/summary" "disk-guard.sh --expect"
 n=1
 while [ "$n" -le 45 ]; do
     mkdir "$HW_SYSFS/class/net/eth$n"
@@ -230,18 +230,18 @@ while [ "$n" -le 45 ]; do
 done
 "$S/hw-survey" --out "$WORK/many" > "$WORK/many-summary"
 [ "$(wc -l < "$WORK/many-summary")" -le 40 ] || fail '多数の機器で40行を超えた'
-has "$WORK/many-summary" '行は詳細ログを参照'
-has "$WORK/many-summary" "disk-guard.sh --expect '"
+has "$WORK/many-summary" 'more lines'
+has "$WORK/many-summary" "disk-guard.sh --expect"
 : > "$MOCK_LOG"
 "$S/hw-survey" --out "$WORK/no-speed" > "$WORK/no-speed-summary"
 lacks "$MOCK_LOG" 'dd '
 MOCK_FS=ext4
 export MOCK_FS
 if "$S/hw-survey" --out "$WORK/reject/new" > "$WORK/reject-log" 2>&1; then fail 'ディスク保存を許した'; fi
-has "$WORK/reject-log" 'ディスクに書くことになる'
+has "$WORK/reject-log" 'would write to disk'
 [ ! -e "$WORK/reject" ] || fail 'FS 判定前にディレクトリを作った'
 "$S/hw-survey" --allow-disk --out "$WORK/allowed" > "$WORK/allow-log" 2>&1
-has "$WORK/allow-log" 'ディスクに書くことになる'
+has "$WORK/allow-log" 'would write to disk'
 # PATH を閉じ、インストール済みの本物の smartctl にフォールバックしない。
 mkdir "$WORK/no-smart"
 for cmd in awk sed grep head tail cat tr readlink dirname ls uname date sh; do
@@ -249,35 +249,42 @@ for cmd in awk sed grep head tail cat tr readlink dirname ls uname date sh; do
 done
 ln -s "$WORK/bin/dd" "$WORK/no-smart/dd"
 PATH=$WORK/no-smart "$S/hw-disks" > "$WORK/no-smart-output"
-has "$WORK/no-smart-output" '未取得: smartctlなし'
-has "$WORK/no-smart-output" '未取得: 起動媒体の親ディスク'
+has "$WORK/no-smart-output" 'N-A: smartctl missing'
+has "$WORK/no-smart-output" 'N-A: boot disk parent'
 PATH=$WORK/no-smart "$S/hw-ports" > "$WORK/no-tools-ports"
-has "$WORK/no-tools-ports" '未取得: ethtoolなし'
-has "$WORK/no-tools-ports" 'NIC eth0: リンク=up 速度=1000'
+has "$WORK/no-tools-ports" 'N-A: ethtool missing'
+has "$WORK/no-tools-ports" 'NIC eth0: link=up Speed=1000'
 # sysfs は読み取り可能でも、リンクダウン時などに read が失敗することがある。
 mv "$HW_SYSFS/class/net/eth0/speed" "$WORK/nic-speed"
 mkdir "$HW_SYSFS/class/net/eth0/speed"
 PATH=$WORK/no-smart "$S/hw-ports" > "$WORK/unreadable-speed"
-has "$WORK/unreadable-speed" 'NIC eth0: リンク=up 速度=不明'
+has "$WORK/unreadable-speed" 'NIC eth0: link=up Speed=N-A'
 rmdir "$HW_SYSFS/class/net/eth0/speed"
 mv "$WORK/nic-speed" "$HW_SYSFS/class/net/eth0/speed"
 PATH=$WORK/no-smart "$S/hw-system" > "$WORK/no-tools-system"
-has "$WORK/no-tools-system" '未取得: dmidecodeなし'
+has "$WORK/no-tools-system" 'N-A: dmidecode missing'
 PATH=$WORK/no-smart "$S/hw-battery" > "$WORK/no-tools-battery"
-has "$WORK/no-tools-battery" '未取得: upowerなし' 
+has "$WORK/no-tools-battery" 'N-A: upower missing'
 # mapper の親が取得できなければ、安全側で両操作を省略する。
 PATH=$WORK/no-smart "$S/hw-disk-speed" > "$WORK/no-parent-speed"
 PATH=$WORK/no-smart "$S/disk-guard-suggest" > "$WORK/no-parent-guard"
-has "$WORK/no-parent-guard" '未取得: 起動媒体の親ディスク'
-has "$WORK/no-parent-speed" '未取得: 起動媒体の親ディスク'
+has "$WORK/no-parent-guard" 'N-A: boot disk parent'
+has "$WORK/no-parent-speed" 'N-A: boot disk parent'
 # lsblk がなくても、直接のパーティションなら sysfs から親をたどれる。
 printf '%s\n' '/dev/sde1 /lib/live/mount/medium iso9660 ro 0 0' > "$HW_PROC/mounts"
 : > "$HW_PROC/self/mountinfo"
 PATH=$WORK/no-smart "$S/hw-disks" > "$WORK/direct-boot"
-has "$WORK/direct-boot" 'ディスク: sde (起動媒体)' 
+has "$WORK/direct-boot" 'Disk: sde (boot media)'
 [ ! -e "$MOCK_DD_BAD" ] || fail 'dd が /dev/null 以外へ書いた'
 # 新コマンドのプロファイル判定・長時間検査も偽データだけで実行する。
 MOCK_FS=tmpfs; export MOCK_FS
 sh "$HERE/tests/survey-profiles.sh" "$S" "$WORK"
-printf '%s\n' 'ALL PASS: survey (偽 sysfs/proc、SMART、起動媒体除外、速度、RAM 保存、要約、安全性)'
+# 検査対象の stdout/stderr と RAM ログを全数検査する。偽 sysfs と
+# コマンド・コピーしたソース(コメントは日本語可)だけを除く。
+find "$WORK" -type f ! -path "$S/*" ! -path "$WORK/bin/*" \
+    ! -path "$HW_SYSFS/*" ! -path "$HW_PROC/*" \
+    -exec python3 "$HERE/tests/survey-ascii.py" {} +
+find "$S" -type f -exec python3 "$HERE/tests/survey-ascii.py" --source {} +
+python3 "$HERE/tests/survey-ascii.py" --source "$HERE/auto/bootkit-survey-session"
+printf '%s\n' 'ALL PASS: survey (fixtures, SMART, exclusions, speed, RAM logs, ASCII, 80x40, safety)'
 if [ "${SURVEY_SHOW_SAMPLE:-0}" = 1 ]; then cat "$WORK/summary"; fi

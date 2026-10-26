@@ -51,17 +51,17 @@ sudo hw-survey --speed --mb 128 --out /tmp/my-hw-survey
 
 `--speed` を付けたときだけ順次読み出しを測る。ディスクへの書き込み・マウント・RAID の組み立て・SMART 自己診断・ネットワーク送信は行わず、電池の設定も変更しない。USB 変換器で SMART が取得できない場合は SAT 指定で 1 回再取得する。SMART の生の値(特に摩耗・読み書き量)の単位は機種によって異なる。
 
-出力は既定で `/tmp/hw-survey-<日時>/` の RAM 上に保存する。保存前にファイルシステムが tmpfs・ramfs・overlay かを確かめ、それ以外や判定不能なら中止する。ディスク上へ保存するときだけ `--allow-disk` を明示する。既存の保存先は上書きしない。Live の終了時に RAM 上のログは失われる。欠けている診断コマンドは「未取得」と表示して続ける。試験では `HW_SYSFS` と `HW_PROC` で情報源を差し替えられる。
+出力は既定で `/tmp/hw-survey-<日時>/` の RAM 上に保存する。保存前にファイルシステムが tmpfs・ramfs・overlay かを確かめ、それ以外や判定不能なら中止する。ディスク上へ保存するときだけ `--allow-disk` を明示する。既存の保存先は上書きしない。Live の終了時に RAM 上のログは失われる。画面とログは、日本語フォントのない tty でも読める ASCII 英語で表示する。欠けている診断コマンドは `N-A`(未取得)と表示して続ける。試験では `HW_SYSFS` と `HW_PROC` で情報源を差し替えられる。
 
 `disk-guard-suggest` は、USB・取り外し可能な媒体・起動媒体を除き、容量の 95%〜105% を許容範囲にする。**これは今の実機の値から作った案。想定と違うディスクが混ざっていないか、人が一覧表で確かめてから使う**。`sdX` の名前は起動のたびに変わりうるため、併記した `/dev/disk/by-id` も照合する。この案を表示するだけではインストールも消去も実行しない。
 
-`survey` は DMI から ThinkPad Edge 14 / 0578、Lenovo G560 / 0679 / 20042 を判定し、該当しなければ generic にする。`survey --list` で指定可能な ID を表示する。内蔵の固定ディスクだけを `hdparm -t --direct` で 3 回読み、中央値を表示し、180 秒の CPU 負荷と温度監視を追加する。`survey --long` では SMART long と空きメモリの半分以下の memtester 1 パスも実行する。swap は停止し、停止できなければ負荷・メモリ試験を省略する。出力は RAM 上だけで、撮影用の要約を表示したまま Enter を待つ。
+`survey` は DMI から ThinkPad Edge 14 / 0578、Lenovo G560 / 0679 / 20042 を判定し、該当しなければ generic にする。`survey --list` で指定可能な ID を表示する。内蔵の固定ディスクだけを `hdparm -t --direct` で 3 回読み、中央値を表示し、180 秒の CPU 負荷と温度監視を追加する。`survey --long` では SMART long と空きメモリの半分以下の memtester 1 パスも実行する。swap は停止し、停止できなければ負荷・メモリ試験を省略する。出力は RAM 上だけで、撮影用の要約(1 行 80 桁・40 行以内)を表示したまま Enter を待つ。長い行は `...` で省略し、全文は詳細ログに残す。`GOOD`・`FAIR`・`BAD` は取得範囲の判定で、`N-A`(未取得)・`UNTESTED`(未試験)は合格を意味しない。
 
 amd64 の起動メニューにある `Hardware survey: generic, auto`、`Hardware survey: Lenovo G560, auto`、`Hardware survey: ThinkPad Edge 14 (0578), auto` を選ぶと、安全モードで起動して tty1 で自動検査する。通常起動・arm64 では自動検査しない。[実機検査の手順と判定の目安](docs/hw-survey-procedure.md)を参照。
 
 ## ローカルのテスト
 
-`make` または `make help` で一覧を表示する。`make test` は `tests/test-*.sh` と `tests/test-forky-deps.py` を並列に実行して結果を集計し、失敗があれば非 0 で終わる。空白を含むパスのコピー試験は独立した段階で実行する。`make test-survey` は検査スクリプト、`make test-boot` は起動設定だけを検査する。macOS の make と GNU make に対応し、ISO のビルド・通信・push は行わない。実デバイスを使わず、偽の sysfs/proc とコマンドで検査する。
+`make` または `make help` で一覧を表示する。`make test` は `tests/test-*.sh` と `tests/test-forky-deps.py` を並列に実行して結果を集計し、失敗があれば非 0 で終わる。空白を含むパスのコピー試験は独立した段階で実行する。`make test-survey` は検査スクリプト、`make test-boot` は起動設定だけを検査する。macOS の make と GNU make に対応し、ISO のビルド・通信・push は行わない。実デバイスを使わず、偽の sysfs/proc とコマンドで検査する。survey の全プロファイル・要約・ログ・案内・エラーの ASCII 出力と要約の寸法を検査し、日本語を混ぜた版と安全条件を壊した版が落ちることも並列に確かめる。
 
 ## フレーバー
 
