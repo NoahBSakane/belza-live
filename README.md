@@ -34,6 +34,7 @@ live-build の `Check_package_available` は、同名パッケージの版が複
 
 | コマンド | 調べる内容 |
 | --- | --- |
+| `survey [--profile ID] [--long]` | 機種別の期待値照合・読出速度・CPU冷却・撮影用要約。root 以外は sudo で再実行 |
 | `hw-system` | 機種・BIOS・CPU の型番と機能・メモリとスロット・カーネル。システムのシリアルは出さない |
 | `hw-disks` | ディスクの型番・シリアル・容量・接続・SATA リンク速度・SMART の健康と属性・注意点 |
 | `hw-disk-speed [--mb N] [デバイス...]` | 先頭・中間・末尾を各 N MiB(既定 512)直接読み出し、MB/s と平均を表示。起動媒体は除外 |
@@ -53,6 +54,14 @@ sudo hw-survey --speed --mb 128 --out /tmp/my-hw-survey
 出力は既定で `/tmp/hw-survey-<日時>/` の RAM 上に保存する。保存前にファイルシステムが tmpfs・ramfs・overlay かを確かめ、それ以外や判定不能なら中止する。ディスク上へ保存するときだけ `--allow-disk` を明示する。既存の保存先は上書きしない。Live の終了時に RAM 上のログは失われる。欠けている診断コマンドは「未取得」と表示して続ける。試験では `HW_SYSFS` と `HW_PROC` で情報源を差し替えられる。
 
 `disk-guard-suggest` は、USB・取り外し可能な媒体・起動媒体を除き、容量の 95%〜105% を許容範囲にする。**これは今の実機の値から作った案。想定と違うディスクが混ざっていないか、人が一覧表で確かめてから使う**。`sdX` の名前は起動のたびに変わりうるため、併記した `/dev/disk/by-id` も照合する。この案を表示するだけではインストールも消去も実行しない。
+
+`survey` は DMI から ThinkPad Edge 14 / 0578、IdeaPad G560 / 0679 / 20042 を判定し、該当しなければ generic にする。`survey --list` で指定可能な ID を表示する。内蔵の固定ディスクだけを `hdparm -t --direct` で 3 回読み、中央値を表示し、180 秒の CPU 負荷と温度監視を追加する。`survey --long` では SMART long と空きメモリの半分以下の memtester 1 パスも実行する。swap は停止し、停止できなければ負荷・メモリ試験を省略する。出力は RAM 上だけで、撮影用の要約を表示したまま Enter を待つ。
+
+amd64 の起動メニューにある `Hardware survey: ThinkPad Edge 14 (0578), auto`、`Hardware survey: IdeaPad G560, auto`、`Hardware survey: other PC, auto (generic)` を選ぶと、安全モードで起動して tty1 で自動検査する。通常起動・arm64 では自動検査しない。[実機検査の手順と判定の目安](docs/hw-survey-procedure.md)を参照。
+
+## ローカルのテスト
+
+`make` または `make help` で一覧を表示する。`make test` は `tests/test-*.sh` と `tests/test-forky-deps.py` を並列に実行して結果を集計し、失敗があれば非 0 で終わる。空白を含むパスのコピー試験は独立した段階で実行する。`make test-survey` は検査スクリプト、`make test-boot` は起動設定だけを検査する。macOS の make と GNU make に対応し、ISO のビルド・通信・push は行わない。実デバイスを使わず、偽の sysfs/proc とコマンドで検査する。
 
 ## フレーバー
 

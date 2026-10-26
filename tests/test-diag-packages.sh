@@ -25,7 +25,8 @@ required = '''f2fs-tools jfsutils wget lsof strace jq git smbclient vim
 sg3-utils screen net-tools traceroute whois mtr-tiny rfkill wireless-tools
  iotop sysstat ipmitool kexec-tools openvpn wireguard-tools minicom picocom
 sleuthkit ewf-tools 7zip xorriso squashfs-tools lftp borgbackup gnupg zerofree
-vim-tiny'''.split()
+vim-tiny upower acpi lm-sensors stress-ng memtester hdparm smartmontools iw
+rfkill ethtool usbutils pciutils dmidecode kmod util-linux procps coreutils sudo'''.split()
 
 def require(ok, message):
     if not ok:

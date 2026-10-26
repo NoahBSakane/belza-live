@@ -1,0 +1,98 @@
+#!/bin/sh
+# 機種別の検査。出力は RAM のみ、機器・BIOS の設定は変えない。
+# shellcheck source=auto/survey/hw-common.sh
+. "$(dirname "$0")/hw-common.sh"
+scripts=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+profile=; long=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --list) printf '%s\n' edge14-0578 g560 generic; exit 0 ;;
+        --long) long=1; shift ;;
+        --profile) [ $# -ge 2 ] || exit 2; profile=$2; shift 2 ;;
+        *) echo '使い方: survey [--profile edge14-0578|g560|generic] [--long] [--list]' >&2; exit 2 ;;
+    esac
+done
+case "$profile" in ''|edge14-0578|g560|generic) ;; *) echo '不明なプロファイル' >&2; exit 2 ;; esac
+if [ "$(id -u)" != 0 ]; then
+    set --
+    [ -z "$profile" ] || set -- --profile "$profile"
+    [ "$long" = 0 ] || set -- "$@" --long
+    exec sudo "$scripts/survey" "$@"
+fi
+run() {
+    if command -v "$1" >/dev/null 2>&1; then
+        "$@" 2>&1 || printf '未取得: %s の実行失敗\n' "$1"
+    else missing "$1"; fi
+}
+dmi() {
+    value=$(run dmidecode -s "$1")
+    case "$value" in ''|*未取得*) value=$(read_value "$HW_SYSFS/class/dmi/id/$2") ;; esac
+    printf '%s\n' "$value"
+}
+product=$(dmi system-product-name product_name)
+version=$(dmi system-version product_version)
+family=$(dmi system-family product_family)
+cpu=$(awk -F ': *' '/^(model name|Hardware)[[:space:]]*:/ {print $2; exit}' "$HW_PROC/cpuinfo" 2>/dev/null)
+if [ -z "$profile" ]; then
+    case "$product / $version / $family" in
+        0578*) profile=edge14-0578 ;;
+        *ThinkPad\ Edge*)
+            # 製品番号が無いときも、同名の別世代を誤認しない。
+            if grep -Eq '^model[[:space:]]*:[[:space:]]*37$' "$HW_PROC/cpuinfo" 2>/dev/null; then profile=edge14-0578; else profile=generic; fi ;;
+        *20042*|*0679*|*Lenovo\ G560*) profile=g560 ;;
+        *) profile=generic ;;
+    esac
+fi
+# shellcheck source=/dev/null
+. "$scripts/profiles/$profile.sh"
+root=${SURVEY_RAM_ROOT:-/run}
+fs=$(findmnt -n -o FSTYPE -T "$root" 2>/dev/null) || fs=不明
+case "$fs" in tmpfs|ramfs|overlay) ;; *) echo '未取得: RAM 保存先。検査を中止' >&2; exit 1 ;; esac
+out=$(umask 077; mktemp -d "$root/survey.XXXXXX") || exit 1
+TMPDIR=$out; export TMPDIR
+printf '検査: %s。詳細: %s\n' "$PROFILE_NAME" "$out"
+# swap への書き出しを防ぐ。失敗時は負荷・メモリ試験を実行しない。
+swap_ready=0
+if command -v swapoff >/dev/null 2>&1 && swapoff -a > "$out/swap.txt" 2>&1; then swap_ready=1; fi
+run modprobe coretemp > "$out/coretemp.txt"
+run sensors -u 'coretemp-*' > "$out/idle-sensors.txt"
+run lspci -nn > "$out/pci.txt"
+run dmidecode -t 17 > "$out/memory.txt"
+run rfkill list > "$out/rfkill.txt"
+run iw dev > "$out/iw-dev.txt"
+run iw list > "$out/iw-list.txt"
+run lsusb -t > "$out/usb.txt"
+run efibootmgr > "$out/efi.txt"
+run dmesg > "$out/dmesg.txt"
+# SMART・Security は速度測定より先に取得する。
+internal_disks > "$out/internal-disks.txt"
+while IFS= read -r disk; do
+    run hdparm -I "/dev/$disk" > "$out/security-$disk.txt"
+done < "$out/internal-disks.txt"
+HW_SPEED_METHOD=hdparm; export HW_SPEED_METHOD
+"$scripts/hw-survey" --speed --out "$out/details" > "$out/hw-survey.txt" 2>&1 || echo '未取得: hw-survey' >> "$out/hw-survey.txt"
+"$scripts/disk-guard-suggest" > "$out/disk-guard-suggest.txt" 2>&1
+# 追加の判定・温度監視。詳細は別ファイルに残す。
+# shellcheck source=auto/survey/survey-checks.sh
+. "$scripts/survey-checks.sh"
+{
+    printf '== %s / %s ==\n' "$PROFILE_NAME" "$profile"
+    printf '機種: %s / %s / %s\nCPU: %s\n' "$product" "$version" "$family" "${cpu:-未取得}"
+    profile_checks
+    disk_checks
+    cooling_check
+    long_checks
+} > "$out/summary-body.txt"
+{
+    awk 'NR<=32 {print} END {if(NR>32) printf "ほか %d 行は詳細ログを参照\n", NR-32}' "$out/summary-body.txt"
+    printf '%s\n' '手動: CMOS 電池・HDD/Supervisor パスワード' \
+        '目視: ドット抜け[ ] ヒンジ[ ] キー打鍵[ ] ファン音[ ]' \
+        'ポート: eSATA / ExpressCard / VGA / HDMI は機器なしなら未試験'
+    printf '詳細(RAM): %s\n' "$out"
+    printf '%s\n' '良/可/不可は取得範囲の判定。未取得・未試験は合格ではない' '撮影後 Enter で戻る'
+} > "$out/summary.txt"
+# ANSI の消去は端末だけ。要約ファイルはプレーンテキスト。
+[ ! -t 1 ] || printf '\033[2J\033[H'
+cat "$out/summary.txt"
+IFS= read -r answer || :
+: "$answer"

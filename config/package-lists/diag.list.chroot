@@ -97,6 +97,13 @@ nmap
 socat
 netcat-openbsd
 lm-sensors
+upower
+acpi
+kmod
+util-linux
+procps
+coreutils
+sudo
 hwinfo
 f3
 stress-ng

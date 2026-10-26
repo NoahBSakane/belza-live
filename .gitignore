@@ -16,3 +16,5 @@
 *.zsync
 SHA256SUMS
 /config/includes.chroot/
+
+/.agent-handoff/

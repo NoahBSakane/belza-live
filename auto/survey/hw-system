@@ -17,7 +17,7 @@ else printf '%s\n' 'メモリ: 未取得: meminfoなし'; fi
 if command -v dmidecode >/dev/null 2>&1; then
     dmidecode -t memory 2>/dev/null | awk '
         /^Memory Device$/ {print "メモリスロット:"; next}
-        /^[ \t]*(Size|Locator|Bank Locator|Type|Speed|Configured Memory Speed):/ {sub(/^[ \t]*/, ""); print "  " $0}'
+        /^[ \t]*(Size|Locator|Bank Locator|Type|Speed|Configured Memory Speed|Part Number):/ {sub(/^[ \t]*/, ""); print "  " $0}'
 else missing dmidecode; fi
 if [ -r "$HW_PROC/sys/kernel/osrelease" ]; then
     printf 'カーネル: %s\n' "$(read_value "$HW_PROC/sys/kernel/osrelease")"

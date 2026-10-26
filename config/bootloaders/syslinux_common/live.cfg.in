@@ -22,3 +22,23 @@ label live-@FLAVOUR@-safe
 	linux @LINUX@
 	initrd @INITRD@
 	append @APPEND_LIVE@ bootkit.safe=1
+
+# BEGIN BOOTKIT SURVEY
+label live-@FLAVOUR@-survey-edge14-0578
+	menu label Hardware survey: ThinkPad Edge 14 (0578), auto
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=edge14-0578
+
+label live-@FLAVOUR@-survey-g560
+	menu label Hardware survey: IdeaPad G560, auto
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=g560
+
+label live-@FLAVOUR@-survey-generic
+	menu label Hardware survey: other PC, auto (generic)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=generic
+# END BOOTKIT SURVEY

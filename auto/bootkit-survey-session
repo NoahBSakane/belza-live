@@ -1,0 +1,18 @@
+#!/bin/sh
+# カーネル引数は既知の ID だけを受け付け、シェル文字列として評価しない。
+profile=
+safe=0
+# カーネル引数は空白区切り。パス展開だけを禁止する。
+set -f
+# shellcheck disable=SC2013
+for arg in $(cat "${BOOTKIT_CMDLINE:-/proc/cmdline}"); do
+    case "$arg" in
+        bootkit.safe=1) safe=1 ;;
+        bootkit.survey=*) profile=${arg#bootkit.survey=} ;;
+    esac
+done
+case "$profile" in edge14-0578|g560|generic) ;; *) exit 0 ;; esac
+[ "$safe" = 1 ] || { echo '安全モードが無いため自動検査を中止'; exit 1; }
+survey --profile "$profile"
+# /etc/profile を読まず、GUI の自動起動を避けて root シェルを残す。
+exec /bin/sh -i
