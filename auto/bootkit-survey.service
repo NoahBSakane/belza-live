@@ -1,0 +1,20 @@
+[Unit]
+Description=Offline hardware survey on tty1
+ConditionKernelCommandLine=bootkit.survey
+After=systemd-udev-settle.service getty@tty1.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bootkit-survey-session
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Environment=TERM=linux
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

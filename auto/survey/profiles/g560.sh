@@ -1,0 +1,10 @@
+#!/bin/sh
+# shellcheck disable=SC2034
+# 未確認の初期値(調査由来。実機の測定で更新する)
+PROFILE_NAME='IdeaPad G560 / 0679 / 20042 (目安)'
+EXPECTED_PCI='8086:0044 8086:0046 8086:3b09'
+BIOS_PATTERN='^29CN[0-9]+WW'
+BATTERY_WH=48.8
+EXPECT_TRACKPOINT=0
+EXPECT_LAN=0
+EXPECT_NOTE='初期値と違う(要更新)'

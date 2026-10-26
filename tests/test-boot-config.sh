@@ -57,7 +57,49 @@ check_templates() {
     contains "$grub/grub.cfg" "submenu 'Utilities...' --hotkey=u {"
     entry "$grub/grub.cfg" 'menuentry "Live system, copy to RAM"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ toram"
     entry "$grub/grub.cfg" 'menuentry "Live system, safe mode"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ bootkit.safe=1"
-    [ "$(grep -c "${tab}initrd @INITRD_LIVE@" "$grub/grub.cfg")" = 2 ] || fail '追加項目の initrd がない'
+    expected_initrd=2
+    if [ "$arch" = amd64 ]; then
+        expected_initrd=5
+        for id in edge14-0578 g560 generic; do
+            grep -Fq "bootkit.safe=1 bootkit.survey=$id" "$sys/live.cfg.in" || fail "BIOS survey $id がない"
+            grep -Fq "bootkit.safe=1 bootkit.survey=$id" "$grub/grub.cfg" || fail "GRUB survey $id がない"
+            [ -f "config/includes.chroot/usr/local/bin/profiles/$id.sh" ] || fail 'プロファイルが未組込'
+        done
+        contains config/includes.chroot/etc/systemd/system/bootkit-survey.service 'ConditionKernelCommandLine=bootkit.survey'
+        contains config/includes.chroot/etc/systemd/system/bootkit-survey.service 'TTYPath=/dev/tty1'
+        contains config/includes.chroot/etc/systemd/system/getty@tty1.service.d/survey.conf 'ConditionKernelCommandLine=!bootkit.survey'
+        [ -L config/includes.chroot/etc/systemd/system/multi-user.target.wants/bootkit-survey.service ] || fail 'service 未有効'
+        sh -n config/includes.chroot/usr/local/bin/bootkit-survey-session
+    else
+        if grep -q bootkit.survey "$grub/grub.cfg" "$sys/live.cfg.in"; then fail 'arm64 に survey メニューがある'; fi
+        [ ! -e config/includes.chroot/etc/systemd/system/bootkit-survey.service ] || fail 'arm64 に survey service がある'
+    fi
+    if [ "$arch" = amd64 ]; then
+        # シェルへの遷移だけをスタブへ差し替え、引数解析は生成した実物を実行する。
+        sed 's|exec /bin/sh -i|exec survey-test-shell -i|' config/includes.chroot/usr/local/bin/bootkit-survey-session > session-test.sh
+        # shellcheck disable=SC2016
+        printf '#!/bin/sh\nprintf "survey %%s\\n" "$*" >> "$SESSION_LOG"\n' > "$WORK/bin/survey"
+        # shellcheck disable=SC2016
+        printf '#!/bin/sh\nprintf "shell %%s\\n" "$*" >> "$SESSION_LOG"\n' > "$WORK/bin/survey-test-shell"
+        chmod +x "$WORK/bin/survey" "$WORK/bin/survey-test-shell"
+        SESSION_LOG=$WORK/session.log; export SESSION_LOG
+        for line in 'boot=live' 'bootkit.survey=invalid' 'xbootkit.survey=g560'; do
+            : > "$SESSION_LOG"
+            printf '%s\n' "$line" > "$WORK/session-cmdline"
+            BOOTKIT_CMDLINE=$WORK/session-cmdline sh session-test.sh
+            [ ! -s "$SESSION_LOG" ] || fail '通常起動または不正IDで自動検査した'
+        done
+        for id in edge14-0578 g560 generic; do
+            : > "$SESSION_LOG"
+            printf 'bootkit.safe=1 bootkit.survey=%s\n' "$id" > "$WORK/session-cmdline"
+            BOOTKIT_CMDLINE=$WORK/session-cmdline sh session-test.sh
+            contains "$SESSION_LOG" "survey --profile $id"
+            contains "$SESSION_LOG" 'shell -i'
+        done
+        printf '%s\n' 'bootkit.safe=10 bootkit.survey=g560' > "$WORK/session-cmdline"
+        if BOOTKIT_CMDLINE=$WORK/session-cmdline sh session-test.sh > /dev/null; then fail 'safeなしの自動検査を許可'; fi
+    fi
+    [ "$(grep -c "${tab}initrd @INITRD_LIVE@" "$grub/grub.cfg")" = "$expected_initrd" ] || fail '追加項目の initrd がない'
     contains "$grub/memtest.cfg" "${tab}${tab}linux @MEMTEST_DIR@/memtest.efi"
     contains "$grub/memtest.cfg" "${tab}${tab}linux @MEMTEST_DIR@/memtest.bin"
     [ "$(grep -c 'menuentry "Memtest86+"' "$grub/memtest.cfg")" = 3 ] || fail 'GRUB の Memtest86+ がない'

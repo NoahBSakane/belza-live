@@ -149,20 +149,21 @@ done
 chmod +x "$WORK/bin/"* "$S/"*
 PATH=$WORK/bin:$PATH
 export PATH
-for script in "$S/"*; do sh -n "$script"; done
+find "$S" -type f -exec sh -n {} \;
 sh -n "$HERE/tests/test-survey.sh"
-if command -v shellcheck >/dev/null 2>&1; then
-    (cd "$HERE" && shellcheck -s sh auto/survey/* tests/test-survey.sh)
-fi
 # 危険な操作を、実行されないコメントや分岐内も含めて禁止する。
-if grep -En 'mkfs|(^|[[:space:]])mount[[:space:]]|mdadm[[:space:]]+--assemble|smartctl[[:space:]]+-t|hdparm[[:space:]]+--security|blockdev[[:space:]]+--setrw' "$S/"*; then
+if grep -REn 'mkfs|(^|[[:space:]])mount[[:space:]]|mdadm[[:space:]]+--assemble|hdparm[[:space:]]+--security|badblocks[[:space:]]+(-w|-n)|nvme[[:space:]]+format|stress-ng.*--hdd|fio.*(write|rw=)|blockdev[[:space:]]+--setrw' "$S/"*; then
     fail '禁止された操作がある'
 fi
-if grep -Eoh '>[[:space:]]*/dev/[^[:space:];|)]*' "$S/"* | grep -Ev '^>[[:space:]]*/dev/null$'; then
+if grep -REoh '>[[:space:]]*/dev/[^[:space:];|)]*' "$S/"* | grep -Ev '^>[[:space:]]*/dev/null$'; then
     fail 'デバイスへのリダイレクトがある'
 fi
-if grep -Eh 'dd[[:space:]]' "$S/"* | grep -Eo 'of=[^[:space:]]+' | grep -Ev '^of=/dev/null$'; then
+if grep -REh 'dd[[:space:]]' "$S/"* | grep -Eo 'of=[^[:space:]]+' | grep -Ev '^of=/dev/null$'; then
     fail 'dd の書き込み先が危険'
+fi
+if command -v shellcheck >/dev/null 2>&1; then
+    (cd "$HERE" && find "$S" -type f -exec shellcheck -x -s sh {} + &&
+        shellcheck -s sh tests/test-survey.sh tests/survey-profiles.sh)
 fi
 "$S/hw-system" > "$WORK/system"
 has "$WORK/system" 'ThinkPad TEST'; has "$WORK/system" 'CPU: Fake CPU'
@@ -210,7 +211,7 @@ has "$HW_PROC/quoted-expect" "sda:228:252:O'Neil"
 printf '%s\n' '  SanDisk SSD  ' > "$HW_SYSFS/block/sda/device/model"
 "$S/hw-disk-speed" --mb 128 > "$WORK/speed"
 has "$WORK/speed" 'sda: 先頭 67.11 / 中間 67.11 / 末尾 67.11 / 平均 67.11 MB/s'
-lacks "$MOCK_LOG" 'dd if=/dev/sde '
+for excluded in sdc sdd sde; do lacks "$MOCK_LOG" "dd if=/dev/$excluded "; done
 has "$MOCK_LOG" 'skip=114404 count=128'; has "$MOCK_LOG" 'skip=228808 count=128'
 "$S/hw-disk-speed" --mb 128 /dev/sde > "$WORK/boot-speed"
 has "$WORK/boot-speed" '(起動媒体) 測定対象外'
@@ -275,5 +276,8 @@ printf '%s\n' '/dev/sde1 /lib/live/mount/medium iso9660 ro 0 0' > "$HW_PROC/moun
 PATH=$WORK/no-smart "$S/hw-disks" > "$WORK/direct-boot"
 has "$WORK/direct-boot" 'ディスク: sde (起動媒体)' 
 [ ! -e "$MOCK_DD_BAD" ] || fail 'dd が /dev/null 以外へ書いた'
+# 新コマンドのプロファイル判定・長時間検査も偽データだけで実行する。
+MOCK_FS=tmpfs; export MOCK_FS
+sh "$HERE/tests/survey-profiles.sh" "$S" "$WORK"
 printf '%s\n' 'ALL PASS: survey (偽 sysfs/proc、SMART、起動媒体除外、速度、RAM 保存、要約、安全性)'
 if [ "${SURVEY_SHOW_SAMPLE:-0}" = 1 ]; then cat "$WORK/summary"; fi

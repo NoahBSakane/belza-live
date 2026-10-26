@@ -1,0 +1,8 @@
+Device [8086:0044]
+Device [8086:0046]
+Device [8086:3b09]
+Device [8086:3b29]
+Device [8086:3b34]
+Device [8086:3b3c]
+Device [10ec:8168]
+Device [8086:0084]

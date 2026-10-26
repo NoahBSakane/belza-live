@@ -23,6 +23,27 @@ for arg do
     disk=${arg#/dev/}
     if ! disks | grep -Fqx "$disk"; then printf '%s: 対象外\n' "$arg"; continue; fi
     if is_boot "$disk"; then printf '%s: (起動媒体) 測定対象外\n' "$disk"; continue; fi
+    if ! internal_disks | grep -Fqx "$disk"; then
+        printf '%s: (USB・取り外し可能媒体) 測定対象外\n' "$disk"; continue
+    fi
+    if [ "${HW_SPEED_METHOD:-dd}" = hdparm ]; then
+        if ! command -v hdparm >/dev/null 2>&1; then missing hdparm; continue; fi
+        values=; failed=0
+        # shellcheck disable=SC2034
+        for pass in 1 2 3; do
+            result=$(hdparm -t --direct "/dev/$disk" 2>&1) || { failed=1; break; }
+            value=$(printf '%s\n' "$result" | awk '/MB\/sec/ {for(i=2;i<=NF;i++) if($i=="MB/sec" && $(i-1) ~ /^[0-9.]+$/) print $(i-1)}')
+            [ -n "$value" ] || { failed=1; break; }
+            values="$values $value"
+        done
+        if [ "$failed" = 1 ]; then printf '%s: 未取得: 読み出しエラー\n' "$disk"; continue; fi
+        printf '%s\n' "$values" | awk -v d="$disk" '{
+            a=$1; b=$2; c=$3
+            if(a>b){t=a;a=b;b=t} if(b>c){t=b;b=c;c=t} if(a>b){t=a;a=b;b=t}
+            printf "%s: 中央値 %.2f MB/s (目安: %s; HDD 5400rpm 70〜110 / 7200rpm 100〜130)\n",d,b,(b<40?"不可: 40未満":"可")
+        }'
+        continue
+    fi
     sectors=$(read_value "$HW_SYSFS/block/$disk/size")
     case "$sectors" in ''|*[!0-9]*) printf '%s: 読み出しエラー(容量不明)\n' "$disk"; continue ;; esac
     total=$((sectors / 2048))

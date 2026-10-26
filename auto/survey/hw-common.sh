@@ -41,6 +41,10 @@ boot_disks() {
             }' "$HW_PROC/self/mountinfo"
         fi
     )
+    if [ -z "$sources" ] && command -v findmnt >/dev/null 2>&1; then
+        sources=$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null) || :
+    fi
+    [ -n "$sources" ] || { printf '%s\n' '!起動媒体未判定'; return; }
     for source in $sources; do
         ancestors=
         if command -v lsblk >/dev/null 2>&1; then
@@ -83,10 +87,22 @@ sata_link() {
 smart_attributes() {
     awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z_]+$/ && $3 ~ /^0x/ {
         id=$1+0
-        if(id==5||id==9||id==12||id==177||id==231||id==233||id==187||id==188||id==194||id==197||id==198||id==199||id==241||id==242) {
+        if(id==5||id==10||id==196||id==9||id==12||id==177||id==231||id==233||id==187||id==188||id==194||id==197||id==198||id==199||id==241||id==242) {
             raw=$10; for(i=11;i<=NF;i++) raw=raw " " $i
             warn=($6+0>0 && $4+0<=$6+0)||($9!="-" && $9!="")
             printf "SMART %s %s: %s%s\n",id,$2,raw,warn?" [しきい値警告]":""
         }
     }'
+}
+
+# 自己診断・速度測定は共通で内蔵の固定媒体だけに限定する。
+internal_disks() {
+    BOOT_DISKS=$(boot_disks)
+    printf '%s\n' "$BOOT_DISKS" | grep -Fqx '!起動媒体未判定' && return 0
+    for candidate in $(disks); do
+        is_boot "$candidate" && continue
+        [ "$(connection "$candidate")" != usb ] || continue
+        [ "$(read_value "$HW_SYSFS/block/$candidate/removable")" = 0 ] || continue
+        printf '%s\n' "$candidate"
+    done
 }

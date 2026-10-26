@@ -179,8 +179,8 @@ PYTHON
 }
 check_common() {
     check_forky
-    for source in auto/survey/*; do
-        installed=config/includes.chroot/usr/local/bin/${source##*/}
+    find auto/survey -type f | while IFS= read -r source; do
+        installed=config/includes.chroot/usr/local/bin/${source#auto/survey/}
         [ -x "$installed" ] || fail "$installed が実行可能でない"
         cmp "$source" "$installed"
         sh -n "$installed"

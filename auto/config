@@ -14,8 +14,8 @@ rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chro
 rm -f config/hooks/live/0200-icewm-keys.hook.chroot
 rm -rf config/includes.chroot
 mkdir -p config/includes.chroot/usr/local/bin
-cp auto/survey/* config/includes.chroot/usr/local/bin/
-chmod +x config/includes.chroot/usr/local/bin/*
+cp -R auto/survey/. config/includes.chroot/usr/local/bin/
+find config/includes.chroot/usr/local/bin -type f -exec chmod +x {} \;
 case "$FLAVOR" in
 	cli) ;;
 	lxqt)
@@ -169,6 +169,28 @@ case "$ARCH" in
 	arm64) BOOTLOADERS="grub-efi"; MEMTEST="none" ;;
 	*) echo "unsupported ARCH: $ARCH" >&2; exit 1 ;;
 esac
+# 切り替え時は前の自動検査項目を消し、amd64 だけに再生成する。
+for menu in config/bootloaders/grub-pc/grub.cfg config/bootloaders/syslinux_common/live.cfg.in; do
+    sed '/^# BEGIN BOOTKIT SURVEY$/,/^# END BOOTKIT SURVEY$/d' "$menu" > "$menu.new"
+    if [ "$ARCH" = amd64 ]; then
+        printf '%s\n' '# BEGIN BOOTKIT SURVEY' >> "$menu.new"
+        case "$menu" in
+            *grub.cfg) cat auto/survey-grub.cfg >> "$menu.new" ;;
+            *) cat auto/survey-syslinux.cfg >> "$menu.new" ;;
+        esac
+        printf '%s\n' '# END BOOTKIT SURVEY' >> "$menu.new"
+    fi
+    mv "$menu.new" "$menu"
+done
+if [ "$ARCH" = amd64 ]; then
+    mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
+    mkdir -p config/includes.chroot/etc/systemd/system/getty@tty1.service.d
+    printf '%s\n' '[Unit]' 'ConditionKernelCommandLine=!bootkit.survey' > config/includes.chroot/etc/systemd/system/getty@tty1.service.d/survey.conf
+    cp auto/bootkit-survey.service config/includes.chroot/etc/systemd/system/
+    cp auto/bootkit-survey-session config/includes.chroot/usr/local/bin/
+    chmod +x config/includes.chroot/usr/local/bin/bootkit-survey-session
+    ln -s ../bootkit-survey.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/bootkit-survey.service
+fi
 lb config noauto \
 	--mode debian \
 	--distribution trixie \
