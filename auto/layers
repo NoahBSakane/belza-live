@@ -3,9 +3,10 @@
 # with one flavor upper at a time; squashfs compression uses all available CPUs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ "$(uname -s)" = Linux ] && [ "$(id -u)" = 0 ] || {
-    echo 'layers requires a privileged Linux container as root' >&2; exit 1;
-}
+if [ "$(uname -s)" != Linux ] || [ "$(id -u)" != 0 ]; then
+    echo 'layers requires a privileged Linux container as root' >&2
+    exit 1
+fi
 action=${1:?expected build or check}
 root=$PWD
 case "$root" in *[:,]*) echo 'overlay paths cannot contain colon or comma' >&2; exit 1;; esac
