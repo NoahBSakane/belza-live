@@ -21,18 +21,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: amd64, flavor: cli,  runner: ubuntu-24.04 }
-          - { arch: amd64, flavor: lxqt, runner: ubuntu-24.04 }
-          - { arch: amd64, flavor: icewm, runner: ubuntu-24.04 }
-          - { arch: arm64, flavor: cli,  runner: ubuntu-24.04-arm }
-          - { arch: arm64, flavor: lxqt, runner: ubuntu-24.04-arm }
-          - { arch: arm64, flavor: icewm, runner: ubuntu-24.04-arm }
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+
+      - name: Test configuration
+        run: make test
 
       - name: Free disk space
         run: |
@@ -42,7 +41,7 @@ jobs:
       - name: Build the ISO in a Debian trixie container
         run: |
           docker run --rm --privileged --security-opt seccomp=unconfined \
-            -e ARCH=${{ matrix.arch }} -e FLAVOR=${{ matrix.flavor }} -e TZ=Asia/Tokyo \
+            -e ARCH=${{ matrix.arch }} -e TZ=Asia/Tokyo \
             -v "$PWD":/work -w /work debian:trixie bash -euxc '
               apt-get update
               if [ "$ARCH" = amd64 ]; then
@@ -59,13 +58,13 @@ jobs:
 
       - name: Checksums
         run: |
-          mv live-image-${{ matrix.arch }}.hybrid.iso bootkit-linux-${{ matrix.arch }}-${{ matrix.flavor }}.iso
+          mv live-image-${{ matrix.arch }}.hybrid.iso bootkit-linux-${{ matrix.arch }}.iso
           ls -la *.iso
           sha256sum *.iso | tee SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bootkit-linux-iso-${{ matrix.arch }}-${{ matrix.flavor }}
+          name: bootkit-linux-iso-${{ matrix.arch }}
           path: |
             *.iso
             SHA256SUMS

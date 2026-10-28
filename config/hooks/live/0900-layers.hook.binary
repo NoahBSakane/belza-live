@@ -1,0 +1,6 @@
+#!/bin/sh
+# live-build executes binary hooks from binary/, before checksums and binary_iso.
+set -eu
+cp ../.layers/images/*.squashfs ../.layers/images/*.module live/
+cp ../.layers/images/*.packages live/
+../auto/layers check "$PWD/live"

@@ -44,22 +44,39 @@ check_templates() {
     contains "$sys/utilities.cfg" '@OPTIONAL_MEMTEST_INCLUDE@'
     contains "$sys/memtest.cfg" 'label memtest'
     grep -q 'menu label .*Memtest86+' "$sys/memtest.cfg" || fail 'BIOS の Memtest86+ がない'
-    contains "$sys/live.cfg.in" 'label live-@FLAVOUR@'
+    contains "$sys/live.cfg.in" 'label live-@FLAVOUR@-icewm'
     contains "$sys/live.cfg.in" 'label live-@FLAVOUR@-failsafe'
     [ "$(grep -c 'menu default' "$sys/live.cfg.in")" = 1 ] || fail '既定項目が変わった'
+    python3 - <<'PYTHON'
+from pathlib import Path
+import re
+sys = Path('config/bootloaders/syslinux_common/live.cfg.in').read_text()
+grub = Path('config/bootloaders/grub-pc/grub.cfg').read_text()
+entries = re.findall(r'^label ([^\n]+)\n(.*?)(?=^label |\Z)', sys, re.M | re.S)
+assert [label for label, body in entries if 'menu default' in body] == ['live-@FLAVOUR@-icewm'], 'syslinux default must be icewm'
+assert re.search(r'^menuentry "([^"]+)"', grub, re.M)[1] == 'Live system (icewm)', 'grub first entry must be icewm'
+assert 'set default=0' in Path('config/bootloaders/grub-pc/config.cfg').read_text()
+for flavor in ('cli', 'icewm', 'lxqt'):
+    body = dict(entries)['live-@FLAVOUR@-' + flavor]
+    assert 'module=' + flavor in body
+    assert re.search(r'menuentry "Live system \(' + flavor + r'\)" \{[^}]*module=' + flavor, grub)
+for line in sys.splitlines() + grub.splitlines():
+    if '@APPEND_LIVE' in line or '@LB_BOOTAPPEND_LIVE' in line or '@APPEND_VERIFY_CHECKSUMS@' in line:
+        assert re.search(r'module=(cli|icewm|lxqt)( |$)', line), line
+PYTHON
     tab=$(printf '\t')
-    entry "$sys/live.cfg.in" 'Live system, copy to RAM' "${tab}append @APPEND_LIVE@ toram"
-    entry "$sys/live.cfg.in" 'Live system, safe mode' "${tab}append @APPEND_LIVE@ bootkit.safe=1"
+    entry "$sys/live.cfg.in" 'Live system, copy to RAM' "${tab}append @APPEND_LIVE@ module=icewm toram"
+    entry "$sys/live.cfg.in" 'Live system, safe mode' "${tab}append @APPEND_LIVE@ module=cli bootkit.safe=1"
     contains "$grub/grub.cfg" 'source /boot/grub/config.cfg'
-    contains "$grub/grub.cfg" '@LINUX_LIVE@'
+    contains "$grub/grub.cfg" 'menuentry "Live system (icewm)" {'
     contains "$grub/grub.cfg" "${tab}if @ENABLE_MEMTEST@; then"
     contains "$grub/grub.cfg" "source${tab}/boot/grub/install_start.cfg"
     contains "$grub/grub.cfg" "submenu 'Utilities...' --hotkey=u {"
-    entry "$grub/grub.cfg" 'menuentry "Live system, copy to RAM"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ toram"
-    entry "$grub/grub.cfg" 'menuentry "Live system, safe mode"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ bootkit.safe=1"
-    expected_initrd=2
+    entry "$grub/grub.cfg" 'menuentry "Live system, copy to RAM"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ module=icewm toram"
+    entry "$grub/grub.cfg" 'menuentry "Live system, safe mode"' "${tab}linux @KERNEL_LIVE@ @APPEND_LIVE@ module=cli bootkit.safe=1"
+    expected_initrd=6
     if [ "$arch" = amd64 ]; then
-        expected_initrd=5
+        expected_initrd=9
         for id in edge14-0578 g560 generic; do
             grep -Fq "bootkit.safe=1 bootkit.survey=$id" "$sys/live.cfg.in" || fail "BIOS survey $id がない"
             grep -Fq "bootkit.safe=1 bootkit.survey=$id" "$grub/grub.cfg" || fail "GRUB survey $id がない"
@@ -179,7 +196,8 @@ FUNCS
 }
 for arch in amd64 arm64; do
     for flavor in icewm cli lxqt; do
-        ARCH=$arch FLAVOR=$flavor sh auto/config > lb.log
+        ARCH=$arch sh auto/config > lb.log
+        sh auto/flavor "$flavor"
         arg --architectures "$arch"
         case "$arch" in
             amd64) arg --bootloaders syslinux,grub-efi; arg --memtest memtest86+ ;;

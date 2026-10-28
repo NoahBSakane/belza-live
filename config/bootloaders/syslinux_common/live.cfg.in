@@ -1,44 +1,56 @@
-label live-@FLAVOUR@
-	menu label ^Live system (@FLAVOUR@)
+label live-@FLAVOUR@-icewm
+	menu label Live system (icewm)
 	menu default
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@
+	append @APPEND_LIVE@ module=icewm
+
+label live-@FLAVOUR@-cli
+	menu label Live system (cli)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ module=cli
+
+label live-@FLAVOUR@-lxqt
+	menu label Live system (lxqt)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ module=lxqt
 
 label live-@FLAVOUR@-failsafe
 	menu label Live system (@FLAVOUR@ fail-safe mode)
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE_FAILSAFE@
+	append @APPEND_LIVE_FAILSAFE@ module=cli
 
 label live-@FLAVOUR@-toram
 	menu label Live system, copy to RAM
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@ toram
+	append @APPEND_LIVE@ module=icewm toram
 
 label live-@FLAVOUR@-safe
 	menu label Live system, safe mode
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@ bootkit.safe=1
+	append @APPEND_LIVE@ module=cli bootkit.safe=1
 
 # BEGIN BOOTKIT SURVEY
 label live-@FLAVOUR@-survey-generic
 	menu label Hardware survey: generic, auto
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=generic
+	append @APPEND_LIVE@ module=cli bootkit.safe=1 bootkit.survey=generic
 
 label live-@FLAVOUR@-survey-g560
 	menu label Hardware survey: Lenovo G560, auto
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=g560
+	append @APPEND_LIVE@ module=cli bootkit.safe=1 bootkit.survey=g560
 
 label live-@FLAVOUR@-survey-edge14-0578
 	menu label Hardware survey: ThinkPad Edge 14 (0578), auto
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE@ bootkit.safe=1 bootkit.survey=edge14-0578
+	append @APPEND_LIVE@ module=cli bootkit.safe=1 bootkit.survey=edge14-0578
 # END BOOTKIT SURVEY

@@ -1,0 +1,28 @@
+#!/bin/sh
+# Whitespace-separated image names, bottom to top (live-boot setup_unionfs).
+set -eu
+mode=${1:?expected generate or check}
+root=${2:?expected live directory}
+case "$mode" in
+    generate)
+        mkdir -p "$root"
+        for flavor in cli icewm lxqt; do
+            {
+                printf '%s\n' filesystem.squashfs
+                [ "$flavor" = cli ] || printf '10-%s.squashfs\n' "$flavor"
+            } > "$root/$flavor.module"
+        done
+        ;;
+    check)
+        for flavor in cli icewm lxqt; do
+            expected=filesystem.squashfs
+            [ "$flavor" = cli ] || expected="$expected 10-$flavor.squashfs"
+            actual=$(awk '{$1=$1; if (NF) printf "%s%s", sep, $0; sep=" "}' "$root/$flavor.module")
+            [ "$actual" = "$expected" ] || { echo "Invalid $flavor.module: $actual" >&2; exit 1; }
+            for image in $expected; do
+                [ -s "$root/$image" ] || { echo "Missing layer: $image" >&2; exit 1; }
+            done
+        done
+        ;;
+    *) echo "Unknown module action: $mode" >&2; exit 1 ;;
+esac

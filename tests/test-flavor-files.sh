@@ -20,7 +20,7 @@ export PATH
 cd "$WORK"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 contains() { grep -Fqx -- "$2" "$1" || fail "$1: $2 がない"; }
-run_config() { FLAVOR=$1 sh auto/config > lb.log; }
+run_config() { sh auto/config > lb.log; sh auto/flavor "$1"; }
 hook=config/hooks/live/0100-no-modemmanager.hook.chroot
 ssh_hook=config/hooks/live/0300-ssh-off.hook.chroot
 ssh_on=config/includes.chroot/usr/local/bin/ssh-on

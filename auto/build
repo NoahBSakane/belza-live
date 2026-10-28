@@ -1,3 +1,18 @@
-#!/bin/sh
-set -e
-lb build noauto "${@}" 2>&1 | tee build.log
+#!/bin/bash
+# pipefail propagates failures through tee; bash 3.2 compatible.
+set -euo pipefail
+stage() {
+    local started=$SECONDS
+    echo "BEGIN: $*"
+    "$@"
+    echo "END: $* ($((SECONDS - started)) seconds)"
+    df -h .
+}
+{
+    stage lb bootstrap "$@"
+    stage lb chroot "$@"
+    stage ./auto/layers build
+    stage lb installer "$@"
+    stage lb binary "$@"
+    stage lb source "$@"
+} 2>&1 | tee build.log

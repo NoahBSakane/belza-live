@@ -79,7 +79,8 @@ for flavor in cli lxqt icewm; do
     for arch in amd64 arm64; do
         (
             cd "$WORK/build"
-            PATH="$WORK/bin:$PATH" FLAVOR=$flavor ARCH=$arch sh auto/config
+            PATH="$WORK/bin:$PATH" ARCH=$arch sh auto/config
+            sh auto/flavor "$flavor"
         ) > "$WORK/auto-config.log" 2>&1 || {
             cat "$WORK/auto-config.log" >&2
             exit 1

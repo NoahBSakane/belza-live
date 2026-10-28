@@ -29,8 +29,7 @@ for iso in "$input"/*/*.iso; do
     [ -f "$iso" ] || continue
     name=${iso##*/}
     case "$name" in
-        bootkit-linux-amd64-cli.iso|bootkit-linux-amd64-lxqt.iso|bootkit-linux-amd64-icewm.iso|\
-        bootkit-linux-arm64-cli.iso|bootkit-linux-arm64-lxqt.iso|bootkit-linux-arm64-icewm.iso) ;;
+        bootkit-linux-amd64.iso|bootkit-linux-arm64.iso) ;;
         *) die "Unexpected ISO name: $name" ;;
     esac
     if grep -Fq "  $name" "$output/SHA256SUMS"; then die "Duplicate ISO: $name"; fi
@@ -52,7 +51,7 @@ for iso in "$input"/*/*.iso; do
     fi
     count=$((count + 1))
 done
-[ "$count" -gt 0 ] || die 'No ISO artifacts found'
+[ "$count" -eq 2 ] || die 'Expected exactly two ISO artifacts (amd64 and arm64)'
 for asset in "$output"/*; do
     [ "$(wc -c < "$asset")" -le "$limit" ] || die "Oversized asset: $asset"
 done
@@ -64,7 +63,8 @@ cat > "$notes" <<EOF
 - lxqt: 診断ツールに LXQt と Calamares を追加。
 - icewm: 診断ツールに軽量な IceWM を追加。
 
-amd64 と arm64 の ISO を用意しています。
+amd64 と arm64 の ISO を1つずつ用意しています。各 ISO の起動メニューで選択し、既定は icewm です。
+Debian Installer の Start installer は cli 基本層だけを導入します。
 
 ## ダウンロードと検証
 

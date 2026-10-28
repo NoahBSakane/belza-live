@@ -55,7 +55,8 @@ for arch in ('amd64', 'arm64'):
     # GUI → CLI の切り替え後にも混入しないことを確認する。
     for flavor in ('lxqt', 'icewm', 'cli'):
         subprocess.run(['sh', 'auto/config'], cwd=root,
-                       env=dict(os.environ, ARCH=arch, FLAVOR=flavor), check=True)
+                       env=dict(os.environ, ARCH=arch, FLAVOR=""), check=True)
+        subprocess.run(["sh", "auto/flavor", flavor], cwd=root, check=True)
         names = [name for path in (root / 'config/package-lists').glob('*.list.chroot')
                  for name in packages(path, arch)]
         require(names.count('gparted') == (0 if flavor == 'cli' else 1),
@@ -70,10 +71,10 @@ if mode == '--mutation-check':
                     '共通パッケージが欠落'),
         'duplicate': ('config/package-lists/diag.list.chroot', 'wget\n', 'wget\nwget\n',
                       '共通パッケージが重複'),
-        'cli-gparted': ('auto/config', 'cli) ;;',
+        'cli-gparted': ('auto/flavor', 'cli) ;;',
                         'cli) echo gparted > config/package-lists/cli.list.chroot ;;',
                         'gparted のフレーバー分離が不正'),
-        'gui-missing': ('auto/config', 'calamares-settings-debian gparted >',
+        'gui-missing': ('auto/flavor', 'calamares-settings-debian gparted >',
                         'calamares-settings-debian >', 'gparted のフレーバー分離が不正'),
     }
     for name, (file, old, new, expected) in mutations.items():

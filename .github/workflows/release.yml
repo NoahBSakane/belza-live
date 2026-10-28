@@ -92,9 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           for arch in amd64 arm64; do
-            for flavor in cli lxqt icewm; do
-              test -f "artifacts/bootkit-linux-iso-$arch-$flavor/bootkit-linux-$arch-$flavor.iso"
-            done
+            test -f "artifacts/bootkit-linux-iso-$arch/bootkit-linux-$arch.iso"
           done
           sh scripts/release-assets.sh artifacts release-assets "$BUILD_COMMIT" "$BUILD_RUN_URL" release-notes.md
       - name: Show planned attachments and publish

@@ -1,0 +1,159 @@
+#!/bin/bash
+# Linux/root only. Never writes to the base chroot. Runtime is O(B + I + L),
+# with one flavor upper at a time; squashfs compression uses all available CPUs.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+[ "$(uname -s)" = Linux ] && [ "$(id -u)" = 0 ] || {
+    echo 'layers requires a privileged Linux container as root' >&2; exit 1;
+}
+action=${1:?expected build or check}
+root=$PWD
+case "$root" in *[:,]*) echo 'overlay paths cannot contain colon or comma' >&2; exit 1;; esac
+mkdir -p .layers
+scratch=$(mktemp -d "$root/.layers/work.XXXXXX")
+mounts=()
+mount_at() {
+    local target=$1
+    shift
+    mount "$@" "$target"
+    mounts+=("$target")
+}
+unmount_all() {
+    local i
+    for ((i=${#mounts[@]}-1; i>=0; i--)); do
+        umount -R "${mounts[$i]}" || return 1
+        unset 'mounts[i]'
+    done
+}
+cleanup() {
+    local status=$?
+    trap - EXIT
+    if unmount_all; then
+        rm -rf "$scratch"
+    else
+        echo "Unmount failed; retaining $scratch" >&2
+        status=1
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+pack() {
+    mksquashfs "$1" "$2" -noappend -comp xz -xattrs -no-progress "${@:3}"
+}
+case "$action" in
+    build)
+        [ -s chroot/var/lib/dpkg/status ] || { echo 'Run lb chroot first' >&2; exit 1; }
+        mkdir -p .layers/images
+        for flavor in icewm lxqt; do
+            dir=$scratch/$flavor
+            merged=$dir/merged
+            mkdir -p "$dir/upper" "$dir/work" "$merged"
+            mount_at "$merged" -t overlay overlay -o \
+                "lowerdir=$root/chroot,upperdir=$dir/upper,workdir=$dir/work,redirect_dir=off,metacopy=off,index=off"
+            # Build-only mounts cannot leak into the layer. Prevent service starts.
+            mkdir -p "$merged/dev" "$merged/proc" "$merged/sys" "$merged/run"
+            mount_at "$merged/dev" --rbind /dev
+            mount --make-rslave "$merged/dev"
+            mount_at "$merged/proc" -t proc proc
+            mount_at "$merged/sys" --rbind /sys
+            mount --make-rslave "$merged/sys"
+            mount_at "$merged/run" -t tmpfs tmpfs
+            for file in etc/resolv.conf usr/sbin/policy-rc.d; do
+                mkdir -p "$dir/saved/$(dirname "$file")"
+                if [ -e "$merged/$file" ] || [ -L "$merged/$file" ]; then
+                    cp -a "$merged/$file" "$dir/saved/$file"
+                fi
+                rm -f "$merged/$file"
+            done
+            cp /etc/resolv.conf "$merged/etc/resolv.conf"
+            printf '#!/bin/sh\nexit 101\n' > "$merged/usr/sbin/policy-rc.d"
+            chmod +x "$merged/usr/sbin/policy-rc.d"
+            sh auto/flavor "$flavor" "$dir"
+            # Package names are a trusted, whitespace-separated generated list.
+            packages=$(cat "$dir/config/package-lists/$flavor.list.chroot")
+            chroot "$merged" /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get update
+            # shellcheck disable=SC2086
+            chroot "$merged" /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y $packages
+            cp -a "$dir/config/includes.chroot/." "$merged/"
+            if [ "$flavor" = icewm ]; then
+                chroot "$merged" /bin/sh < "$dir/config/hooks/live/0200-icewm-keys.hook.chroot"
+            fi
+            # GUI dependencies can reintroduce services disabled in the base.
+            for hook in 0100-no-modemmanager 0300-ssh-off; do
+                chroot "$merged" /bin/sh < "config/hooks/live/$hook.hook.chroot"
+            done
+            chroot "$merged" apt-get clean
+            chroot "$merged" dpkg-query -W > ".layers/images/$flavor.packages"
+            # Restore build-only files before recording the upper.
+            for file in etc/resolv.conf usr/sbin/policy-rc.d; do
+                rm -f "$merged/$file"
+                if [ -e "$dir/saved/$file" ] || [ -L "$dir/saved/$file" ]; then
+                    cp -a "$dir/saved/$file" "$merged/$file"
+                fi
+            done
+            # Clear through the merged view, so lower caches are hidden too.
+            find "$merged/var/cache/apt" "$merged/var/lib/apt/lists" "$merged/var/log" \
+                -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            unmount_all
+            pack "$dir/upper" "$root/.layers/images/10-$flavor.squashfs" -e boot
+            du -h ".layers/images/10-$flavor.squashfs"
+            # No full flavor tree is retained while constructing the next one.
+            rm -rf "$dir"
+        done
+        sh auto/modules generate .layers/images
+        ;;
+    check)
+        live=${2:-binary/live}
+        live=$(cd "$live" && pwd)
+        sh auto/modules check "$live"
+        # Exercise whiteout and opaque through the same pack/mount path.
+        probe=$scratch/probe
+        mkdir -p "$probe/base/opaque" "$probe/upper" "$probe/work" "$probe/merged" \
+            "$probe/base-ro" "$probe/delta-ro" "$probe/result"
+        touch "$probe/base/deleted" "$probe/base/opaque/hidden"
+        mount_at "$probe/merged" -t overlay overlay -o \
+            "lowerdir=$probe/base,upperdir=$probe/upper,workdir=$probe/work,redirect_dir=off,metacopy=off,index=off"
+        rm "$probe/merged/deleted"
+        rm -rf "$probe/merged/opaque"
+        mkdir "$probe/merged/opaque"
+        touch "$probe/merged/opaque/visible"
+        unmount_all
+        pack "$probe/base" "$probe/base.squashfs"
+        pack "$probe/upper" "$probe/delta.squashfs"
+        mount_at "$probe/base-ro" -t squashfs -o loop,ro "$probe/base.squashfs"
+        mount_at "$probe/delta-ro" -t squashfs -o loop,ro "$probe/delta.squashfs"
+        mount_at "$probe/result" -t overlay overlay -o "lowerdir=$probe/delta-ro:$probe/base-ro"
+        test ! -e "$probe/result/deleted"
+        test ! -e "$probe/result/opaque/hidden"
+        test -f "$probe/result/opaque/visible"
+        echo 'PASS: squashfs whiteout and opaque round trip'
+        unmount_all
+        # Mount the actual binary_rootfs output, not a separately made base.
+        mkdir -p "$scratch/base" "$scratch/delta" "$scratch/merged"
+        mount_at "$scratch/base" -t squashfs -o loop,ro "$live/filesystem.squashfs"
+        for flavor in cli icewm lxqt; do
+            lower=$scratch/base
+            if [ "$flavor" != cli ]; then
+                mount_at "$scratch/delta" -t squashfs -o loop,ro "$live/10-$flavor.squashfs"
+                lower=$scratch/delta:$lower
+            fi
+            # Match live-boot's writable top, including CLI's single lowerdir.
+            mkdir -p "$scratch/runtime-$flavor/upper" "$scratch/runtime-$flavor/work"
+            mount_at "$scratch/merged" -t overlay overlay -o \
+                "lowerdir=$lower,upperdir=$scratch/runtime-$flavor/upper,workdir=$scratch/runtime-$flavor/work"
+            for executable in icewm startlxqt; do
+                case "$flavor:$executable" in
+                    icewm:icewm|lxqt:startlxqt) test -x "$scratch/merged/usr/bin/$executable" ;;
+                    *) test ! -e "$scratch/merged/usr/bin/$executable" ;;
+                esac
+            done
+            umount "$scratch/merged"; unset 'mounts[${#mounts[@]}-1]'
+            if [ "$flavor" != cli ]; then
+                umount "$scratch/delta"; unset 'mounts[${#mounts[@]}-1]'
+            fi
+            echo "PASS: mounted $flavor module; GUI executables isolated"
+        done
+        ;;
+    *) echo "Unknown layer action: $action" >&2; exit 1 ;;
+esac
