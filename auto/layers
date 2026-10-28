@@ -105,6 +105,8 @@ case "$action" in
             if [ ! -e "$root/chroot/usr/sbin/policy-rc.d" ]; then
                 rm -f "$dir/upper/usr/sbin/policy-rc.d"
             fi
+            # Directories new to this layer carry a harmless opaque mark; drop it.
+            sh auto/strip-new-opaque "$root/chroot" "$dir/upper"
             sh auto/assert-additive "$dir/upper"
             pack "$dir/upper" "$root/.layers/images/10-$flavor.squashfs" -e boot
             du -h ".layers/images/10-$flavor.squashfs"

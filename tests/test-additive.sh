@@ -36,3 +36,26 @@ for mode in clean whiteout opaque user-whiteout stat-fail attr-fail; do
     fi
     echo "PASS: additive scan $mode (status $status)"
 done
+# Opaque marks are stripped where the base lacks the path, rejected where it has it.
+mkdir -p "$WORK/ostub" "$WORK/lower/kept/sub" "$WORK/upper/kept/sub" "$WORK/upper/fresh"
+cat > "$WORK/ostub/getfattr" <<'STUB'
+#!/bin/sh
+case "$4" in */upper/kept/sub|*/upper/fresh) exit 0 ;; esac
+exit 1
+STUB
+cat > "$WORK/ostub/setfattr" <<'STUB'
+#!/bin/sh
+echo "$4" >> "$STRIP_LOG"
+STUB
+chmod +x "$WORK/ostub/"*
+STRIP_LOG=$WORK/strip.log PATH="$WORK/ostub:$PATH" \
+    sh "$HERE/auto/strip-new-opaque" "$WORK/lower" "$WORK/upper" 2> "$WORK/opaque.err" || status=$?
+[ "${status:-0}" != 0 ] || { echo 'FAIL: opaque directory over a base path accepted' >&2; exit 1; }
+grep -q 'replaces a base path: /kept/sub' "$WORK/opaque.err"
+echo 'PASS: opaque directory over a base path rejected'
+rm -f "$WORK/strip.log"
+rmdir "$WORK/lower/kept/sub"
+STRIP_LOG=$WORK/strip.log PATH="$WORK/ostub:$PATH" \
+    sh "$HERE/auto/strip-new-opaque" "$WORK/lower" "$WORK/upper"
+grep -q '/upper/kept/sub$' "$WORK/strip.log" && grep -q '/upper/fresh$' "$WORK/strip.log"
+echo 'PASS: opaque marks on new directories stripped'

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Linux/root only. overlayfs marks directories it creates under a merged
+# parent as opaque. That is harmless while the base has no such path, so strip
+# the mark there; reject it where the base has the directory (a real replace).
+set -eu
+lower=${1:?expected base root}
+upper=${2:?expected layer root}
+find "$upper" -mindepth 1 -type d -exec sh -c '
+    lower=$1 upper=$2
+    shift 2
+    for dir do
+        getfattr -h -n trusted.overlay.opaque "$dir" > /dev/null 2>&1 || continue
+        rel=${dir#"$upper"}
+        if [ -e "$lower$rel" ] || [ -L "$lower$rel" ]; then
+            echo "ERROR: opaque directory replaces a base path: $rel" >&2
+            exit 1
+        fi
+        setfattr -h -x trusted.overlay.opaque "$dir"
+    done
+' sh "$lower" "$upper" {} +
