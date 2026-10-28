@@ -15,21 +15,25 @@ fi
 # Ventoy の persistence は ext4 の単独のマウントとして見えず、`persistent` もコマンドラインに出ない。
 # 代わりに、casper-rw ラベルのデバイスが存在し、ルート(overlay)の容量がそのデバイスの容量に近い
 # (RAM 上の tmpfs ではない)ことで、persistence 上のルートだと判定する。
-persist_dev=$(blkid -L casper-rw 2>/dev/null) && [ -n "$persist_dev" ] || {
-    echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1;
-}
+persist_dev=$(blkid -L casper-rw 2>/dev/null || true)
+if [ -z "$persist_dev" ]; then
+    echo '書き込み可能な casper-rw persistence が見つかりません' >&2
+    exit 1
+fi
 root_opts=$(findmnt -rn -o OPTIONS /)
 case ",$root_opts," in *,rw,*) ;; *) echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1 ;; esac
 root_size=$(df -B1 --output=size / | tail -n 1 | tr -d ' ')
 dev_size=$(blockdev --getsize64 "$persist_dev")
 # ext4 の使用可能容量はデバイスの 85〜100% になる。RAM 上のルートとは通常一致しない。
-[ "$root_size" -ge $((dev_size * 85 / 100)) ] && [ "$root_size" -le "$dev_size" ] || {
-    echo '書き込み可能な casper-rw persistence が見つかりません' >&2; exit 1;
-}
+if [ "$root_size" -lt $((dev_size * 85 / 100)) ] || [ "$root_size" -gt "$dev_size" ]; then
+    echo '書き込み可能な casper-rw persistence が見つかりません' >&2
+    exit 1
+fi
 user=${SUDO_USER:-}
-[ -n "$user" ] && [ "$user" != root ] || {
-    echo 'Live ユーザーの端末から sudo sh で実行してください' >&2; exit 1;
-}
+if [ -z "$user" ] || [ "$user" = root ]; then
+    echo 'Live ユーザーの端末から sudo sh で実行してください' >&2
+    exit 1
+fi
 getent passwd "$user" >/dev/null
 getent hosts archive.ubuntu.com >/dev/null || { echo 'ネットワーク/DNS を確認してください' >&2; exit 1; }
 [ -n "$(ip route show default)$(ip -6 route show default)" ] || {
@@ -42,7 +46,10 @@ apt-get update --error-on=any
 # Preserve any pre-existing policy; a rejected service start is intentionally 101.
 policy=/usr/sbin/policy-rc.d
 backup=/usr/sbin/policy-rc.d.bootkit-backup
-[ ! -e "$backup" ] && [ ! -L "$backup" ] || { echo '以前の policy 退避が残っています' >&2; exit 1; }
+if [ -e "$backup" ] || [ -L "$backup" ]; then
+    echo '以前の policy 退避が残っています' >&2
+    exit 1
+fi
 had_policy=false
 if [ -e "$policy" ] || [ -L "$policy" ]; then mv "$policy" "$backup"; had_policy=true; fi
 restore_policy() {
