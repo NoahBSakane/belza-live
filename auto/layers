@@ -81,9 +81,9 @@ case "$action" in
                 chroot "$merged" /bin/sh < "$dir/config/hooks/live/0200-icewm-keys.hook.chroot"
             fi
             # GUI dependencies can reintroduce services disabled in the base.
-            for hook in 0100-no-modemmanager 0300-ssh-off; do
-                chroot "$merged" /bin/sh < "config/hooks/live/$hook.hook.chroot"
-            done
+            # No autoremove here: it would remove base packages and leave whiteouts.
+            chroot "$merged" /bin/sh -c 'apt-get purge -y modemmanager || :'
+            chroot "$merged" /bin/sh < config/hooks/live/0300-ssh-off.hook.chroot
             chroot "$merged" apt-get clean
             chroot "$merged" dpkg-query -W > ".layers/images/$flavor.packages"
             # Restore build-only files before recording the upper.
