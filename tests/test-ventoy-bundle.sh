@@ -194,7 +194,7 @@ for script in bundle.rglob('*.sh'):
         text = script.read_text()
         require('mkfs.ext4 -F -L casper-rw "$output"' in text, 'ext4 の出力先が違う')
         require('"$formatter" -t ext4 -F -L casper-rw -b 1024 "$output"' in text, 'mke2fs の出力先が違う')
-        require('(set -C; : > "$output")' in text and '[ ! -L "$output" ]' in text, '通常ファイル限定がない')
+        require('(set -C; : > "$output")' in text and '[ -L "$output" ]' in text, '通常ファイル限定がない')
 print('PASS: 外付け拒否・危険コマンド検査')
 
 # Stub formatters: verify argument boundaries and exclusive output creation,

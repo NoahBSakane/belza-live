@@ -127,7 +127,7 @@ PYTHON
     done
 }
 check_safe() {
-    [ -x "$safe" ] && [ -x "$hook" ] || fail '安全モードが実行可能でない'
+    if [ ! -x "$safe" ] || [ ! -x "$hook" ]; then fail '安全モードが実行可能でない'; fi
     sh -n "$safe"
     sh -n "$hook"
     rules=$WORK/rules
@@ -144,7 +144,7 @@ check_safe() {
     [ ! -e "$rules" ] || fail 'prereqs でルールが作られた'
     sh "$safe"
     for name in 64-md-raid-assembly.rules 63-md-raid-arrays.rules 69-lvm.rules; do
-        [ -f "$rules/$name" ] && [ ! -s "$rules/$name" ] || fail "$name が空のマスクでない"
+        if [ ! -f "$rules/$name" ] || [ -s "$rules/$name" ]; then fail "$name が空のマスクでない"; fi
     done
     # shellcheck disable=SC2016
     contains "$rules/99-bootkit-safe.rules" 'SUBSYSTEM=="block", ACTION=="add|change", KERNEL!="loop*|ram*|sr*|zram*|fd*", RUN+="/sbin/blockdev --setro $devnode"'

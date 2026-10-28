@@ -3,16 +3,17 @@
 set -eu
 allow_external=false
 case "${1:-}" in --allow-external) allow_external=true; shift ;; esac
-[ "$#" -ge 1 ] && [ "$#" -le 2 ] || {
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     echo '使い方: make-persistence.sh [--allow-external] <出力ファイル> [サイズMiB: 4096]' >&2
     exit 2
-}
+fi
 output=$1
 size=${2:-4096}
 case "$size" in ''|*[!0-9]*) echo 'サイズは正の整数です' >&2; exit 2 ;; esac
-[ "$size" -ge 16 ] && [ "$size" -le 1048576 ] || {
-    echo 'サイズは 16〜1048576 MiB で指定してください' >&2; exit 2;
-}
+if [ "$size" -lt 16 ] || [ "$size" -gt 1048576 ]; then
+    echo 'サイズは 16〜1048576 MiB で指定してください' >&2
+    exit 2
+fi
 case "$output" in
     /Volumes/*) $allow_external || { echo '/Volumes/ への直接作成は拒否します' >&2; exit 1; } ;;
 esac
@@ -22,7 +23,10 @@ case "$output" in
     /Volumes/*) $allow_external || { echo '/Volumes/ への直接作成は拒否します' >&2; exit 1; } ;;
     /dev/*) echo 'デバイスへの書き込みは拒否します' >&2; exit 1 ;;
 esac
-[ ! -e "$output" ] && [ ! -L "$output" ] || { echo '既存の出力先は上書きしません' >&2; exit 1; }
+if [ -e "$output" ] || [ -L "$output" ]; then
+    echo '既存の出力先は上書きしません' >&2
+    exit 1
+fi
 case "$(uname -s)" in
     Linux)
         if ! command -v truncate >/dev/null 2>&1 || ! command -v mkfs.ext4 >/dev/null 2>&1; then
