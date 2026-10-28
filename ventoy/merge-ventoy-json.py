@@ -13,11 +13,11 @@ ENTRIES = {
     "auto_install": {
         "image": ISO,
         "template": [f"/ventoy/script/{name}.yaml" for name in (
-            "ubuntu-plus-server", "lubuntu-plus-server", "server-only")],
+            "ubuntu-with-server", "lubuntu-modoki", "server-modoki")],
         "autosel": 0,
         "timeout": 15,
     },
-    "menu_alias": {"image": ISO, "alias": "Ubuntu 26.04.1 LTS (Server / Lubuntu / Ubuntu)"},
+    "menu_alias": {"image": ISO, "alias": "Ubuntu-modoki 26.04.1 bundle"},
 }
 
 

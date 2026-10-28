@@ -36,21 +36,25 @@ def require(condition, message):
 
 grub = (bundle / 'ubuntu/grub.cfg').read_text()
 require(len(grub.encode()) <= 2 * 1024 * 1024, 'conf_replace の 2 MiB 制限を超えた')
-require(re.search(r'^set default=0$', grub, re.M), 'Server が既定でない')
+require(re.search(r'^set default=0$', grub, re.M), 'Lubuntu が既定でない')
 require(re.search(r'^set timeout=30$', grub, re.M), 'timeout が違う')
 entries = re.findall(r'menuentry "([^"]+)" \{([^}]+)\}', grub)
-require([title for title, _ in entries] == [
-    'Server only (text mode)', 'Lubuntu (LXQt, needs the pack)', 'Ubuntu (GNOME)',
-    'Ubuntu (safe graphics)', 'Ubuntu (copy to RAM)',
+expected_menu = [
+    ('Lubuntu-modoki (LXQt)', 'bootkit.session=lubuntu --- quiet splash'),
+    ('Lubuntu-modoki (safe graphics)', 'bootkit.session=lubuntu nomodeset --- quiet splash'),
+    ('Lubuntu-modoki (copy to RAM)', 'bootkit.session=lubuntu toram --- quiet splash'),
+    ('Ubuntu Server-modoki (text mode)', 'systemd.unit=multi-user.target bootkit.session=server --- quiet'),
+    ('Ubuntu Server-modoki (copy to RAM)', 'systemd.unit=multi-user.target bootkit.session=server toram --- quiet'),
+    ('Ubuntu with Server (GNOME)', '--- quiet splash'),
+    ('Ubuntu with Server (safe graphics)', 'nomodeset --- quiet splash'),
+    ('Ubuntu with Server (copy to RAM)', 'toram --- quiet splash'),
+]
+require([title for title, _ in entries] == [title for title, _ in expected_menu] + [
     'Boot from next volume', 'UEFI Firmware Settings'], 'GRUB 項目/順序が違う')
-for index, (_, body) in enumerate(entries[:5]):
-    require('initrd /casper/initrd' in body, 'initrd がない')
-    require(('systemd.unit=multi-user.target' in body) == (index == 0), '文字画面指定が別項目にある')
-    require(('bootkit.session=server' in body) == (index == 0), 'server 指定が違う')
-    require(('bootkit.session=lubuntu' in body) == (index == 1), 'lubuntu 指定が違う')
-require('linux /casper/vmlinuz --- quiet splash' in entries[2][1], '通常 Ubuntu が変わった')
-require('nomodeset --- quiet splash' in entries[3][1], 'safe graphics が変わった')
-require('toram --- quiet splash' in entries[4][1], 'toram がない')
+for (title, body), (_, arguments) in zip(entries, expected_menu):
+    require([line.strip() for line in body.splitlines() if line.strip()] == [
+        'linux /casper/vmlinuz ' + arguments, 'initrd /casper/initrd'],
+        f'GRUB 起動オプションが違う: {title}')
 require(re.search(r'if \[ "\$grub_platform" = "efi" \]; then\s+menuentry "Boot from next volume"', grub), 'UEFI 条件がない')
 for fragment in ['loadfont unicode', 'set menu_color_normal=white/black',
                  'set menu_color_highlight=black/light-gray', 'set gfxpayload=keep', 'exit 1', 'fwsetup']:
@@ -60,9 +64,9 @@ has_yaml = importlib.util.find_spec('yaml') is not None
 if has_yaml:
     import yaml
 expected_packages = {
-    'ubuntu-plus-server': ['ubuntu-server', 'openssh-server'],
-    'lubuntu-plus-server': ['lubuntu-desktop', 'ubuntu-server', 'openssh-server'],
-    'server-only': ['ubuntu-server', 'openssh-server', 'linux-generic'],
+    'ubuntu-with-server': ['ubuntu-server', 'openssh-server'],
+    'lubuntu-modoki': ['lubuntu-desktop', 'ubuntu-server', 'openssh-server'],
+    'server-modoki': ['ubuntu-server', 'openssh-server', 'linux-generic'],
 }
 for name, packages in expected_packages.items():
     text = (bundle / f'script/{name}.yaml').read_text()
@@ -115,7 +119,7 @@ require(data['persistence'][0] == {'image': iso, 'backend': '/ISO/persistence/ub
 require(data['conf_replace'][0] == {'iso': iso, 'org': '/boot/grub/grub.cfg', 'new': '/ventoy/ubuntu/grub.cfg'}, 'conf_replace が違う')
 require(data['auto_install'][0] == {'image': iso, 'autosel': 0, 'timeout': 15,
         'template': [f'/ventoy/script/{name}.yaml' for name in expected_packages]}, 'template が違う')
-require(data['menu_alias'][0] == {'image': iso, 'alias': 'Ubuntu 26.04.1 LTS (Server / Lubuntu / Ubuntu)'}, 'alias が違う')
+require(data['menu_alias'][0] == {'image': iso, 'alias': 'Ubuntu-modoki 26.04.1 bundle'}, 'alias が違う')
 run_merge(out, second)
 require(out.read_bytes() == second.read_bytes(), 'merge が非冪等')
 require(run_merge(source, work / 'unused', '--dry-run').stdout == out.read_text(), 'dry-run が違う')
@@ -150,17 +154,13 @@ for directory in ['usr/share/xsessions', 'usr/share/wayland-sessions', 'etc',
 (root / 'bin/getent').write_text('#!/bin/sh\nexit 0\n')
 (root / 'bin/getent').chmod(0o755)
 selector = (bundle / 'ubuntu/bootkit-session.sh').read_text()
-# The script text is edited by string replacement, so point it at a symlink whose path has no spaces.
-import tempfile
-root_link_dir = Path(tempfile.mkdtemp(prefix='bootkit-root.',
-                                           dir=os.environ.get('BOOTKIT_TEST_LINK_TMPDIR', '/tmp')))
-root_link = root_link_dir / 'r'
-root_link.symlink_to(root)
+# Quote the fake root via an environment variable, including paths with spaces.
 for prefix in ['/etc/', '/var/lib/', '/proc/', '/usr/share/']:
-    selector = selector.replace(prefix, str(root_link) + prefix)
+    selector = selector.replace(prefix, '"${BOOTKIT_TEST_ROOT}"' + prefix)
 runner = work / 'session.sh'
 runner.write_text(selector)
-env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'])
+env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'],
+           BOOTKIT_TEST_ROOT=str(root))
 account = root / 'var/lib/AccountsService/users/test-live-user'
 account.write_text('[User]\nLanguage=en_US.UTF-8\nXSession=stale\n[Other]\nSession=preserve\n')
 for argument, expected in [('bootkit.session=lubuntu', 'Lubuntu'),
@@ -174,8 +174,6 @@ for argument, expected in [('bootkit.session=lubuntu', 'Lubuntu'),
 (root / 'usr/share/wayland-sessions/ubuntu.desktop').unlink()
 result = subprocess.run(['sh', str(runner)], env=env, capture_output=True)
 require(result.returncode != 0, 'セッション欠落を見逃した')
-root_link.unlink()
-root_link_dir.rmdir()
 print('PASS: セッション切替・既存設定保持・欠落時エラー (偽 root)')
 
 result = subprocess.run(['sh', str(bundle / 'make-persistence.sh'), '/Volumes/BOOTKIT-NOT-A-REAL-DISK/no.dat'], capture_output=True)
@@ -246,7 +244,7 @@ def pack_run(df_size, blkid_dev='/dev/dm-1'):
     pack_env = dict(os.environ, PATH=str(pack_bin) + os.pathsep + os.environ['PATH'],
                     DEV_SIZE='4294967296', DF_SIZE=str(df_size), BLKID_DEV=blkid_dev)
     pack_env.pop('SUDO_USER', None)
-    return subprocess.run(['sh', str(bundle / 'ubuntu/ubuntu-pack-setup.sh')], env=pack_env, capture_output=True, text=True)
+    return subprocess.run(['sh', str(bundle / 'ubuntu/ubuntu-modoki-setup.sh')], env=pack_env, capture_output=True, text=True)
 
 refusal = '書き込み可能な casper-rw persistence が見つかりません'
 passed = pack_run(4_000_000_000)
@@ -263,7 +261,7 @@ require(result.returncode == 77, '索引なしで 77 を返さない')
 index_dir = work / 'indexes'
 index_dir.mkdir()
 names = {package for packages in expected_packages.values() for package in packages}
-server = (bundle / 'script/server-only.yaml').read_text()
+server = (bundle / 'script/server-modoki.yaml').read_text()
 names.update(re.search(r'for package in (.+); do', server).group(1).split())
 (index_dir / 'main.xz').write_bytes(lzma.compress(''.join('Package: ' + name + '\n\n' for name in sorted(names)).encode()))
 (index_dir / 'universe.xz').write_bytes(lzma.compress(b''))
@@ -276,20 +274,56 @@ print('PASS: 索引なし 77・偽索引の完全/欠落の区別 (通信なし)
 PY
 if [ "${1:-}" = --mutation-check ]; then
     # Each mutant is an isolated copy; the worktree source is never rewritten.
-    for mutation in default interactive idempotence; do
+    for mutation in menu-name default default-order alias missing-lubuntu-safe missing-lubuntu-ram missing-server-ram interactive idempotence setup-name; do
         destination=$WORK/$mutation
         mkdir -p "$destination"
         cp -R "$BUNDLE/ubuntu" "$BUNDLE/script" "$destination/"
         cp "$BUNDLE/merge-ventoy-json.py" "$BUNDLE/check-package-index.py" "$BUNDLE/make-persistence.sh" "$destination/"
+        check_runner=$0
+        if [ "$mutation" = setup-name ]; then
+            mkdir -p "$destination/tests" "$destination/ventoy"
+            cp "$0" "$destination/tests/test-ventoy-bundle.sh"
+            check_runner=$destination/tests/test-ventoy-bundle.sh
+        fi
         python3 -I - "$destination" "$mutation" <<'PY'
 from pathlib import Path
 import sys
 root, mutation = Path(sys.argv[1]), sys.argv[2]
-if mutation == 'default':
+if mutation == 'menu-name':
     file = root / 'ubuntu/grub.cfg'
-    old, new = 'set default=0', 'set default=2'
+    old, new = 'Ubuntu Server-modoki (text mode)', 'Server' + ' only (text mode)'
+elif mutation == 'default':
+    file = root / 'ubuntu/grub.cfg'
+    old, new = 'set default=0', 'set default=1'
+elif mutation == 'default-order':
+    file = root / 'ubuntu/grub.cfg'
+    text = file.read_text()
+    start = text.index('menuentry \"Lubuntu-modoki')
+    middle = text.index('menuentry \"Ubuntu Server-modoki')
+    end = text.index('menuentry \"Ubuntu with Server')
+    old = text[start:end]
+    new = text[middle:end] + text[start:middle]
+elif mutation == 'alias':
+    file = root / 'merge-ventoy-json.py'
+    old = 'Ubuntu-modoki 26.04.1 bundle'
+    new = 'Ubuntu with Server 26.04.1 ' + 'LTS ' + '(Lubuntu-modoki / Ubuntu Server-modoki)'
+elif mutation.startswith('missing-'):
+    file = root / 'ubuntu/grub.cfg'
+    titles = {
+        'missing-lubuntu-safe': 'Lubuntu-modoki (safe graphics)',
+        'missing-lubuntu-ram': 'Lubuntu-modoki (copy to RAM)',
+        'missing-server-ram': 'Ubuntu Server-modoki (copy to RAM)',
+    }
+    text = file.read_text()
+    start = text.index('menuentry "' + titles[mutation] + '"')
+    end = text.index('}\n', start) + 2
+    old, new = text[start:end], ''
+elif mutation == 'setup-name':
+    file = root / 'tests/test-ventoy-bundle.sh'
+    old = "bundle / 'ubuntu/ubuntu-modoki-setup.sh'"
+    new = "bundle / 'ubuntu/ubuntu-" + "pack-setup.sh'"
 elif mutation == 'interactive':
-    file = root / 'script/server-only.yaml'
+    file = root / 'script/server-modoki.yaml'
     old, new = '  interactive-sections: [storage, identity]\n', ''
 else:
     file = root / 'merge-ventoy-json.py'
@@ -298,14 +332,17 @@ text = file.read_text()
 assert old in text
 file.write_text(text.replace(old, new))
 PY
-        if VENTOY_BUNDLE=$destination sh "$0" --checks > "$WORK/$mutation.log" 2>&1; then
+        if VENTOY_BUNDLE=$destination sh "$check_runner" --checks > "$WORK/$mutation.log" 2>&1; then
             echo "FAIL: 壊した版を検出できません: $mutation" >&2; exit 1
         fi
         # Confirm it failed at the intended assertion, not a missing prerequisite.
         case "$mutation" in
-            default) expected='Server が既定でない' ;;
+            menu-name|default-order|missing-*) expected='GRUB 項目/順序が違う' ;;
+            default) expected='Lubuntu が既定でない' ;;
+            alias) expected='alias が違う' ;;
             interactive) expected='storage 対話指定がない' ;;
             idempotence) expected='merge が非冪等' ;;
+            setup-name) expected='persistence 上のルートを拒否した' ;;
         esac
         grep -F "$expected" "$WORK/$mutation.log" >/dev/null
         printf 'PASS: 壊した版を検出 (%s: %s)\n' "$mutation" "$expected"

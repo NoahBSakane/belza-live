@@ -1,11 +1,11 @@
 #!/bin/sh
 # Run from the copied bundle in a persistent Ubuntu Live session.
 set -eu
-[ "$(id -u)" = 0 ] || { echo 'sudo sh ubuntu-pack-setup.sh で実行してください' >&2; exit 1; }
+[ "$(id -u)" = 0 ] || { echo 'sudo sh ubuntu-modoki-setup.sh で実行してください' >&2; exit 1; }
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 marker=/var/lib/bootkit/ubuntu-pack-v1
 if [ -f "$marker" ]; then
-    echo '追加パックは導入済みです'
+    echo '追加パック(Lubuntu-modoki / Ubuntu Server-modoki)は導入済みです'
     exit 0
 fi
 # Prevent accidentally installing into a nonpersistent Live overlay.

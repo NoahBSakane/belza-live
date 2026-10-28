@@ -1,6 +1,6 @@
 # Ventoy の USB 用の一式
 
-公式の `ubuntu-26.04.1-desktop-amd64.iso` だけを使い、Live 起動では文字画面・LXQt・GNOME、自動インストールでは Ubuntu + Server 機能・Lubuntu + Server 機能・Server のみを選ぶための設定。Server と Lubuntu の ISO は置かない。**実機では未検証**であり、既存 USB へ自動で書き込む仕組みは含めない。
+公式の `ubuntu-26.04.1-desktop-amd64.iso` だけを使い、Live 起動では文字画面・LXQt・GNOME、自動インストールでは Ubuntu with Server・Lubuntu-modoki・Ubuntu Server-modoki を選ぶための設定。Lubuntu-modoki・Ubuntu Server-modoki の追加機能は ISO に含まれず、Live 起動では追加パックで永続化領域へ導入する(`modoki` は「もどき(それに近い、同じ公式配布物ではない)」の意味)。**実機では未検証**であり、既存 USB へ自動で書き込む仕組みは含めない。
 
 Ventoy は **1.1.18 以上**を使う。依頼元で確認済みの情報では、1.1.11 に Ubuntu のインストールが失敗する既知の問題があり、1.1.12 で修正されている。この一式では 1.1.18 を前提にする。
 
@@ -13,13 +13,13 @@ USB の最初のパーティションに、最終コピーで次の配置にす�
 /ISO/persistence/ubuntu-26.04.1-amd64.dat
 /ventoy/ventoy.json
 /ventoy/ubuntu/grub.cfg
-/ventoy/ubuntu/ubuntu-pack-setup.sh
+/ventoy/ubuntu/ubuntu-modoki-setup.sh
 /ventoy/ubuntu/bootkit-session.sh
 /ventoy/ubuntu/bootkit-session.service
 /ventoy/ubuntu/bootkit-motd.sh
-/ventoy/script/ubuntu-plus-server.yaml
-/ventoy/script/lubuntu-plus-server.yaml
-/ventoy/script/server-only.yaml
+/ventoy/script/ubuntu-with-server.yaml
+/ventoy/script/lubuntu-modoki.yaml
+/ventoy/script/server-modoki.yaml
 ```
 
 persistence は Live の変更を保存する ext4 ファイルで、ラベルは `casper-rw`、既定サイズは 4096 MiB (4 GiB)。新規の通常ファイルだけを作り、既存ファイル・シンボリックリンク・デバイスは拒否する。Linux では `truncate` と `mkfs.ext4`、Apple Silicon Mac では Homebrew の `e2fsprogs` に含まれる `/opt/homebrew/opt/e2fsprogs/sbin/mke2fs` が必要。道具がなければ案内して終了コード 77 を返す。
@@ -59,20 +59,26 @@ sudo python3 -I ventoy/update-ventoy-mbr.py --ventoy-dir ./ventoy-1.1.18 --backu
 
 ## Live 起動
 
+Ventoy の ISO 別名は `Ubuntu-modoki 26.04.1 bundle`。
+
 Ventoy で ISO を選ぶと、自動インストールのテンプレート選択と persistence 選択を経て、ISO 内の GRUB 起動メニューに進む。persistence の選択画面は ISO 内のメニューより前に出る。Ventoy 側で選択が省略される場合もあるため、保存領域を使う設定で起動したことを確認する。テンプレートの既定は「なし」(`autosel: 0`、待ち時間 15 秒)で、通常の Live 起動を選ぶ。
 
 | ISO 内の項目 | 動作 |
 | --- | --- |
-| Server only (text mode) | 既定。30 秒で選択。`multi-user.target` で文字画面を起動。tty1 は起動ログのまま止まって見えるが、ログインプロンプトは tty2(Alt+F2)に出る(`ubuntu` ユーザー、パスワードなし) |
-| Lubuntu (LXQt, needs the pack) | 追加パック導入後、LXQt セッションを選択 |
-| Ubuntu (GNOME) | 元の Try or Install Ubuntu と同じカーネル引数。追加後も GNOME を選択 |
-| Ubuntu (safe graphics) | `nomodeset` を使う |
-| Ubuntu (copy to RAM) | `toram` を使う。ISO と作業領域に足りる RAM が必要 |
-| Boot from next volume / UEFI Firmware Settings | UEFI だけで表示 |
+| Lubuntu-modoki (LXQt) | 既定。30 秒で選択。追加パック導入済みの LXQt セッションを選択 |
+| Lubuntu-modoki (safe graphics) | LXQt を選択し、`nomodeset` を使う |
+| Lubuntu-modoki (copy to RAM) | LXQt を選択し、`toram` を使う。ISO と作業領域に足りる RAM が必要 |
+| Ubuntu Server-modoki (text mode) | `multi-user.target` で文字画面を起動。tty1 は起動ログのまま止まって見えるが、ログインプロンプトは tty2(Alt+F2)に出る(`ubuntu` ユーザー、パスワードなし) |
+| Ubuntu Server-modoki (copy to RAM) | 文字画面を選択し、`toram` を使う。ISO と作業領域に足りる RAM が必要 |
+| Ubuntu with Server (GNOME) | 元の Try or Install Ubuntu と同じカーネル引数。追加後も GNOME を選択 |
+| Ubuntu with Server (safe graphics) | `nomodeset` を使う |
+| Ubuntu with Server (copy to RAM) | `toram` を使う。ISO と作業領域に足りる RAM が必要 |
+| Boot from next volume | UEFI だけで表示。次のボリュームから起動 |
+| UEFI Firmware Settings | UEFI だけで表示。ファームウェア設定を開く |
 
 `conf_replace` は通常の起動モードで `/boot/grub/grub.cfg` を差し替える。別の起動モードや `loopback.cfg` は対象外。`persistent` オプションは Ventoy に任せ、GRUB には手動で加えない。
 
-## Live の追加パックの初回導入
+## Live の追加パック(Lubuntu-modoki / Ubuntu Server-modoki)の初回導入
 
 persistence を有効にした Ubuntu Live から、USB の `ventoy/ubuntu/` を使い、**Live ユーザーの端末**で実行する。初回は文字画面でも Ubuntu の GUI でもよい。
 
@@ -80,20 +86,23 @@ USB の第 1 パーティション(`/dev/vda1`・`/dev/sdX1` など)は、Ventoy
 
 ```sh
 sudo mount -o ro /dev/mapper/VentoyPart /mnt
-sudo sh /mnt/ventoy/ubuntu/ubuntu-pack-setup.sh
+sudo sh /mnt/ventoy/ubuntu/ubuntu-modoki-setup.sh
 ```
 
 `casper-rw` ラベルのデバイスがあり、ルートの容量がそのデバイスに近い(RAM 上でない)こと、ネットワーク経路、DNS を確認してから APT 索引を更新し、`lubuntu-desktop ubuntu-server openssh-server` を導入する。容量の概算は LXQt 約 1.9GB + Server 約 240MB。APT キャッシュ・更新差分・ユーザーデータは別途必要で、4 GiB の保存領域には余裕が小さい。実際の空き容量とダウンロード量は APT の表示でも確認する。
 
 導入中のサービス自動起動を `policy-rc.d` で抑え、既存の policy は終了時に戻す。SSH サービスとソケットは停止・無効化する。完了印は全工程の成功後だけに残し、2 回目は何もしない。途中失敗時はエラーで止まり、再実行で導入を続ける。既存の SSH を意図的に有効化した場合も、完了印のある再実行は変更しない。
 
+完了マーカー `/var/lib/bootkit/ubuntu-pack-v1` は内部名で、導入済みの永続化領域との互換のため変更しない。
+カーネル引数の `bootkit.session=lubuntu` / `bootkit.session=server` も内部名で、同じ互換性を保つため modoki の名前に合わせて変えない。
+
 自動起動の表示マネージャーは GDM にそろえ、`bootkit-session.service` を表示マネージャーより前に実行する。`bootkit.session=lubuntu` の場合は LXQt、それ以外は Ubuntu のセッションを選ぶ。セッションのファイル名は `/usr/share/xsessions/`・`/usr/share/wayland-sessions/` に実在する `.desktop` から検出し、見つからなければエラーにする。GDM 用の AccountsService のセッション設定を切り替え、手動起動用の SDDM は LXQt の自動ログインに設定する。Live ユーザーの自動ログインを前提とする設定であり、インストール済み OS にこのセットアップを実行しない。
 
 文字画面でログインすると、導入後は次の案内を表示する。初回の導入前には、この案内を出すファイル自体がまだない。
 
 ```text
-GUI を使うには: sudo systemctl start gdm3 (Ubuntu) または sudo systemctl start sddm (Lubuntu)。
-次回から GUI で起動するには、起動メニューで Lubuntu か Ubuntu を選ぶ。
+GUI を使うには: sudo systemctl start gdm3 (Ubuntu with Server) または sudo systemctl start sddm (Lubuntu-modoki)。
+次回から GUI で起動するには、起動メニューで Lubuntu-modoki か Ubuntu with Server を選ぶ。
 ```
 
 手動で GUI を起動する前にも、セッションは現在の `bootkit.session` に応じて設定される。既に GUI が動作中の場合、別の表示マネージャーを同時に起動しない。導入直後の切り替えは再起動で行う。
@@ -106,11 +115,11 @@ Ventoy のメニューはファイルパスを表示するので、目的の名�
 
 | テンプレート | 追加・後処理 |
 | --- | --- |
-| ubuntu-plus-server.yaml | `ubuntu-server` と `openssh-server` を追加し、GNOME を残す |
-| lubuntu-plus-server.yaml | さらに `lubuntu-desktop` を追加。SDDM を設定。DM の設定失敗は警告して続行する |
-| server-only.yaml | `ubuntu-server openssh-server linux-generic` を追加。指定した GUI パッケージを 1 個ずつ存在確認して purge。デスクトップ snap を削除し、autoremove。文字画面と networkd を既定にする |
+| ubuntu-with-server.yaml | `ubuntu-server` と `openssh-server` を追加し、GNOME を残す |
+| lubuntu-modoki.yaml | さらに `lubuntu-desktop` を追加。SDDM を設定。DM の設定失敗は警告して続行する |
+| server-modoki.yaml | `ubuntu-server openssh-server linux-generic` を追加。指定した GUI パッケージを 1 個ずつ存在確認して purge。デスクトップ snap を削除し、autoremove。文字画面と networkd を既定にする |
 
-Server のみでは既存 netplan の `renderer: NetworkManager` を `networkd` へ変更し、`00-installer-config.yaml` にも指定する。NetworkManager を無効にし、networkd と systemd-resolved を有効にする。Wi-Fi など既存設定の networkd への適合性、公式 Server のパッケージ・snap・ネットワーク構成との一致は未確認。GUI を外した Desktop を公式 Server ISO と同等だとは扱わない。
+Ubuntu Server-modoki では既存 netplan の `renderer: NetworkManager` を `networkd` へ変更し、`00-installer-config.yaml` にも指定する。NetworkManager を無効にし、networkd と systemd-resolved を有効にする。Wi-Fi など既存設定の networkd への適合性、公式 Server のパッケージ・snap・ネットワーク構成との一致は未確認。GUI を外した Desktop を公式 Server ISO と同等だとは扱わない。
 
 ## 検査
 
@@ -136,9 +145,9 @@ sh tests/test-ventoy-bundle.sh --check-packages --download
 ## 検証済みの項目
 
 - 2026-10-26: 公式 `ubuntu-26.04.1-desktop-amd64.iso`(SHA-256 は公式の一覧と一致)の `/boot/grub/grub.cfg` を、この一式の `ventoy/ubuntu/grub.cfg` に差し替えた ISO を、QEMU(UEFI、4GiB、TCG)で起動した。Ventoy は介さない。
-  - 「Server only (text mode)」(既定): カーネルのコマンドラインに `systemd.unit=multi-user.target bootkit.session=server` が渡り、GDM は inactive、文字画面のログインプロンプト(tty2)まで到達した。カーネルは 7.0.0-30-generic。
-  - 「Ubuntu (GNOME)」: plymouth のあと GDM のログイン画面(Live session user)まで到達した(QEMU の TCG で約 15 分)。
-  - 追加パック(`bootkit-motd` の案内、Lubuntu、persistence)は、この試験には含まれない。
+  - 「Ubuntu Server-modoki (text mode)」(試験時の既定): カーネルのコマンドラインに `systemd.unit=multi-user.target bootkit.session=server` が渡り、GDM は inactive、文字画面のログインプロンプト(tty2)まで到達した。カーネルは 7.0.0-30-generic。
+  - 「Ubuntu with Server (GNOME)」: plymouth のあと GDM のログイン画面(Live session user)まで到達した(QEMU の TCG で約 15 分)。
+  - 追加パック(`bootkit-motd` の案内、Lubuntu-modoki、persistence)は、この試験には含まれない。
 - 2026-10-26: Ubuntu 26.04(resolute)の main / universe の索引で、自動インストール用 YAML と purge 対象の 14 パッケージ名の実在を確認した(`ventoy/check-package-index.py --download`)。
 
 ## 未検証の項目
@@ -148,4 +157,4 @@ sh tests/test-ventoy-bundle.sh --check-packages --download
 - `bootkit.session` の実効、systemd の順序、SDDM / GDM のセッション選択・Live 自動ログイン。Ubuntu 26.04 の Contents 索引・パッケージ内一覧は未入手で、設定パス・キーの版固有の有効性は未確認。スクリプトにも明記している。
 - GUI の apt 追加が 4 GiB の persistence に収まること、追加後の GNOME / LXQt の動作、`toram` と persistence の併用・USB の取り外し。
 - Ubuntu 26.04 の追加・削除対象パッケージ名の公式索引による実在確認、SDDM の設定、Server 用後処理の実行、netplan と networkd の通信。
-- Server のみと公式 Ubuntu Server の manifest・snap・カーネル・サービス・設定の差。purge 対象の公式 Server manifest 不在も未確認で、完全な Server 化は保証しない。
+- Ubuntu Server-modoki と公式 Ubuntu Server の manifest・snap・カーネル・サービス・設定の差。purge 対象の公式 Server manifest 不在も未確認で、完全な Server 化は保証しない。
