@@ -67,7 +67,9 @@ amd64 の起動メニューにある `Hardware survey: generic, auto`、`Hardwar
 
 アーキテクチャごとに1つの ISO(`bootkit-linux-amd64.iso`・`bootkit-linux-arm64.iso`)を作り、起動メニューの `module=cli`・`module=icewm`・`module=lxqt` で選ぶ。既定は IceWM。CLI の `filesystem.squashfs` に、選んだ GUI の差分層だけを重ねる。[層構成と検証条件](docs/layers.md)を参照。
 
-Debian Installer の `Start installer` は CLI 基本層だけを導入する。LXQt の Calamares は従来どおり同梱するが、統合構成での導入は未検証。
+Debian Installer の `Start installer` サブメニューで、導入するフレーバーを選ぶ。CLI 基本層をコピーした直後、ユーザー作成前に選んだ GUI 層を移植するため、GUI の導入にネットワークは不要。LXQt セッションの Calamares も基本層、LXQt 層の順に展開する。実際の導入・初回起動はまだ未検証で、[QEMU の導入試験](docs/installer-verification.md)で確認する。
+
+層は追加・上書きだけで、削除を表す whiteout・opaque は許さず、ビルド時に検査する。d-i は `bootkit.flavor` がない場合・cli・未知の値では CLI だけを導入する。層の欠落・マウント失敗・whiteout 検出・属性の読出手段不足の場合も、理由を画面と `/var/log/syslog` に出し、CLI のまま続ける。コピー途中や属性復元の失敗では一部だけ適用される場合があるため、同じログの警告を確認する。
 
 - `cli`: コマンドラインのみ。
 - `lxqt`: LXQt と Calamares を足す。
@@ -89,11 +91,18 @@ IceWM では、携帯回線モデムを管理する ModemManager を削除する
 
 ## 起動メニュー
 
-Live の IceWM・CLI・LXQt の3項目と、CLI の fail-safe(カーネルの互換性設定)・インストーラーに加え、次を選べる。amd64 は Legacy BIOS と UEFI、arm64 は UEFI に対応する。
+トップは次の6項目。amd64 は Legacy BIOS と UEFI、arm64 は UEFI に対応する。項目名は ASCII 英語で表示する。
 
-- `Live system, copy to RAM`: IceWM に `toram` を加え、Live のファイルシステムを RAM にコピーする。コピーを完了して起動したあとは起動 USB を取り外せる。Live のコピーと通常の動作に足りる RAM が必要。
-- `Live system, safe mode`: CLI に `bootkit.safe=1` を加える。udev(機器の検出と初期設定を行う仕組み)が起動する前に、md ソフトウェア RAID の自動組み立てと LVM の自動有効化の規則を無効にする。検出したブロックデバイスとパーティションを `blockdev --setro` で読み取り専用にする。`loop*`・`ram*`・`sr*`・`zram*` は対象外。規則は Live 起動後も残り、あとから接続された機器にも適用する。
-- `Memtest86+`: amd64 のみ。BIOS・UEFI とも `Utilities` 内からメモリーを検査できる。arm64 には表示しない。
+1. `Live (icewm)`: 先頭・既定の Live 起動。
+2. `Other flavors`: `Live (cli)`・`Live (lxqt)`。
+3. `Safe / Survey`: IceWM の safe mode・fail-safe・copy to RAM。amd64 には Hardware survey の generic・Lenovo G560・ThinkPad Edge 14 (0578) も表示し、すべて `bootkit.safe=1` を付ける。
+4. `Start installer`: `Start installer (icewm)`・`Start installer (lxqt)`・`Start installer (cli)`。各項目が `bootkit.flavor=` で導入対象を指定する。
+5. `Advanced install options`: 従来の expert・automated・rescue など。フレーバーを指定しない項目は CLI を導入する。
+6. `Utilities`: amd64 の `Memtest86+`、UEFI firmware settings、媒体の整合性検査など。arm64 に memtest は表示しない。
+
+`Live system, copy to RAM` は IceWM に `toram` を加え、Live のファイルシステムを RAM にコピーする。コピーを完了して起動したあとは起動 USB を取り外せる。Live のコピーと通常の動作に足りる RAM が必要。
+
+`Live system, safe mode` は IceWM に `bootkit.safe=1` を加える。udev(機器の検出と初期設定を行う仕組み)が起動する前に、md ソフトウェア RAID の自動組み立てと LVM の自動有効化の規則を無効にする。検出したブロックデバイスとパーティションを `blockdev --setro` で読み取り専用にする。`loop*`・`ram*`・`sr*`・`zram*` は対象外。規則は Live 起動後も残り、あとから接続された機器にも適用する。
 
 安全モードは、壊れかけのディスクに対する OS の自動処理による書き込みを抑えるためのもの。ハードウェアの書き込み防止装置ではなく、管理者による明示的な操作は禁止しない。たとえば `mdadm --assemble` の実行や `blockdev --setrw` による解除は可能で、機器への直接のコマンドや機器自身の内部処理まで防ぐものではない。udev の規則以外から行う RAID 組み立て・LVM 有効化も制限しない。安全モードでも起動 USB 自体を読み取り専用にするため、USB の書き換えには解除が要る。実機での安全モードの動作確認は未実施。
 

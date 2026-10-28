@@ -97,6 +97,15 @@ case "$action" in
             find "$merged/var/cache/apt" "$merged/var/lib/apt/lists" "$merged/var/log" \
                 -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
             unmount_all
+            # These paths are deliberately excluded from the installed layer.
+            # Clear their upper entries too, including cache-cleanup whiteouts.
+            rm -rf "$dir/upper/boot" "$dir/upper/var/cache/apt" \
+                "$dir/upper/var/lib/apt/lists" "$dir/upper/var/log"
+            # Build-only policy file can leave a whiteout when absent in base.
+            if [ ! -e "$root/chroot/usr/sbin/policy-rc.d" ]; then
+                rm -f "$dir/upper/usr/sbin/policy-rc.d"
+            fi
+            sh auto/assert-additive "$dir/upper"
             pack "$dir/upper" "$root/.layers/images/10-$flavor.squashfs" -e boot
             du -h ".layers/images/10-$flavor.squashfs"
             # No full flavor tree is retained while constructing the next one.
@@ -108,28 +117,21 @@ case "$action" in
         live=${2:-binary/live}
         live=$(cd "$live" && pwd)
         sh auto/modules check "$live"
-        # Exercise whiteout and opaque through the same pack/mount path.
+        # Reject each overlay deletion mechanism independently, using real
+        # Linux devices/xattrs in the same privileged container as the build.
         probe=$scratch/probe
-        mkdir -p "$probe/base/opaque" "$probe/upper" "$probe/work" "$probe/merged" \
-            "$probe/base-ro" "$probe/delta-ro" "$probe/result"
-        touch "$probe/base/deleted" "$probe/base/opaque/hidden"
-        mount_at "$probe/merged" -t overlay overlay -o \
-            "lowerdir=$probe/base,upperdir=$probe/upper,workdir=$probe/work,redirect_dir=off,metacopy=off,index=off"
-        rm "$probe/merged/deleted"
-        rm -rf "$probe/merged/opaque"
-        mkdir "$probe/merged/opaque"
-        touch "$probe/merged/opaque/visible"
-        unmount_all
-        pack "$probe/base" "$probe/base.squashfs"
-        pack "$probe/upper" "$probe/delta.squashfs"
-        mount_at "$probe/base-ro" -t squashfs -o loop,ro "$probe/base.squashfs"
-        mount_at "$probe/delta-ro" -t squashfs -o loop,ro "$probe/delta.squashfs"
-        mount_at "$probe/result" -t overlay overlay -o "lowerdir=$probe/delta-ro:$probe/base-ro"
-        test ! -e "$probe/result/deleted"
-        test ! -e "$probe/result/opaque/hidden"
-        test -f "$probe/result/opaque/visible"
-        echo 'PASS: squashfs whiteout and opaque round trip'
-        unmount_all
+        mkdir -p "$probe/opaque"
+        sh auto/assert-additive "$probe"
+        mknod "$probe/deleted" c 0 0
+        if sh auto/assert-additive "$probe"; then
+            echo 'ERROR: additive check accepted whiteout' >&2; exit 1
+        fi
+        rm "$probe/deleted"
+        setfattr -n trusted.overlay.opaque -v y "$probe/opaque"
+        if sh auto/assert-additive "$probe"; then
+            echo 'ERROR: additive check accepted opaque directory' >&2; exit 1
+        fi
+        echo 'PASS: additive check rejects whiteout and opaque independently'
         # Mount the actual binary_rootfs output, not a separately made base.
         mkdir -p "$scratch/base" "$scratch/delta" "$scratch/merged"
         mount_at "$scratch/base" -t squashfs -o loop,ro "$live/filesystem.squashfs"
@@ -137,6 +139,7 @@ case "$action" in
             lower=$scratch/base
             if [ "$flavor" != cli ]; then
                 mount_at "$scratch/delta" -t squashfs -o loop,ro "$live/10-$flavor.squashfs"
+                sh auto/assert-additive "$scratch/delta"
                 lower=$scratch/delta:$lower
             fi
             # Match live-boot's writable top, including CLI's single lowerdir.

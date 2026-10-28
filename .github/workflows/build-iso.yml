@@ -51,7 +51,7 @@ jobs:
               fi
               apt-get install -y --no-install-recommends \
                 live-build debootstrap xorriso $EXTRA \
-                squashfs-tools ca-certificates git sudo dosfstools mtools cpio tzdata
+                squashfs-tools attr ca-certificates git sudo dosfstools mtools cpio tzdata
               ./auto/config
               ./auto/build
             '

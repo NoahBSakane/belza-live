@@ -8,11 +8,33 @@ rm -f config/package-lists/lxqt.list.chroot config/package-lists/icewm.list.chro
     config/hooks/live/0200-icewm-keys.hook.chroot \
     config/includes.chroot/usr/local/bin/kbd-toggle config/includes.chroot/usr/local/bin/ime-on
 rm -rf config/includes.chroot/etc/skel
+rm -f config/includes.chroot/etc/calamares/modules/unpackfs.conf
 case "$FLAVOR" in
 	cli) ;;
 	lxqt)
 		mkdir -p config/package-lists
 		printf '%s\n' live-task-lxqt calamares calamares-settings-debian gparted > config/package-lists/lxqt.list.chroot
+        # Replace calamares-settings-debian's /etc module config after installation.
+        # Only the LXQt layer contains Calamares and this two-image config.
+        mkdir -p config/includes.chroot/etc/calamares/modules
+        cat > config/includes.chroot/etc/calamares/modules/unpackfs.conf <<'EOF'
+---
+unpack:
+    - source: "/run/live/medium/live/filesystem.squashfs"
+      sourcefs: "squashfs"
+      destination: ""
+    - source: "/run/live/medium/live/10-lxqt.squashfs"
+      sourcefs: "squashfs"
+      destination: ""
+      exclude:
+          - "/boot"
+          - "/etc/fstab"
+          - "/etc/crypttab"
+          - "/etc/default/locale"
+          - "/var/cache/apt"
+          - "/var/lib/apt/lists"
+          - "/var/log"
+EOF
 		;;
 	icewm)
 		mkdir -p config/package-lists config/hooks/live \

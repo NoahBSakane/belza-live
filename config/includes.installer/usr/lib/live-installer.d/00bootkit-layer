@@ -1,0 +1,139 @@
+#!/bin/sh
+# Run after the base image, before live-installer's other hooks/user-setup.
+# BOOTKIT_* paths are injectable for device-free tests.
+set -uf
+cmdline=${BOOTKIT_CMDLINE:-/proc/cmdline}
+medium=${BOOTKIT_MEDIUM:-/cdrom/live}
+target=${BOOTKIT_TARGET:-/target}
+syslog=${BOOTKIT_SYSLOG:-/var/log/syslog}
+flavor=
+# Kernel arguments are words, not lines; glob expansion is disabled above.
+# shellcheck disable=SC2013
+for arg in $(cat "$cmdline"); do
+    case "$arg" in bootkit.flavor=*) flavor=${arg#bootkit.flavor=} ;; esac
+done
+case "$flavor" in icewm|lxqt) ;; *) exit 0 ;; esac
+start=$(date +%s)
+size=0
+log() {
+    message="bootkit-layer: flavor=$flavor bytes=$size seconds=$(($(date +%s) - start)) $*"
+    printf '%s\n' "$message" >&2
+    printf '%s\n' "$message" >> "$syslog" 2>/dev/null || :
+    # log-output captures stderr; explicitly show the reason on the installer console.
+    if [ -w /dev/tty ] && [ "${BOOTKIT_NO_TTY:-0}" != 1 ]; then
+        (printf '%s\n' "$message" > /dev/tty) 2>/dev/null || :
+    fi
+}
+image=$medium/10-$flavor.squashfs
+[ -f "$image" ] || { log 'WARNING: layer missing; keeping CLI'; exit 0; }
+size=$(wc -c < "$image" | tr -d ' ')
+work=$(mktemp -d "${BOOTKIT_TMPDIR:-/tmp}/bootkit-layer.XXXXXX") || {
+    log 'WARNING: cannot create workspace; keeping CLI'; exit 0;
+}
+mounted=0
+# shellcheck disable=SC2317,SC2329
+cleanup() {
+    cd / || return
+    if [ "$mounted" = 1 ]; then
+        if ! umount "$work/layer"; then
+            log "WARNING: unmount failed; retaining $work"
+            return
+        fi
+    fi
+    rm -rf "$work"
+}
+trap cleanup 0
+trap 'log "WARNING: interrupted"; exit 0' HUP INT TERM
+mkdir "$work/layer"
+if ! mount -t squashfs -o loop,ro "$image" "$work/layer"; then
+    log 'WARNING: mount failed; keeping CLI'; exit 0
+fi
+mounted=1
+# Debian busybox-udeb has no stat applet. ls -ln reports device major/minor.
+# Detect before copying anything.
+if ! find "$work/layer" -type c -exec sh -c '
+    for file do
+        numbers=$(ls -ln "$file") || exit 1
+        set -- $numbers
+        [ "$5:$6" != "0,:0" ] || exit 1
+    done
+' sh {} +; then
+    log 'WARNING: whiteout or device scan failure; keeping CLI'; exit 0
+fi
+for tool in getfattr setfattr; do
+    command -v "$tool" >/dev/null 2>&1 || {
+        log "WARNING: $tool unavailable; keeping CLI to preserve xattrs/ACLs"; exit 0;
+    }
+done
+# Collect only copied paths. ACLs and capabilities are xattrs too. No tar xattr
+# extensions are required in BusyBox; this matches live-installer's attr pass.
+cd "$work/layer" || exit 0
+if ! find . \( -path ./boot -o -path ./etc/fstab -o -path ./etc/crypttab \
+    -o -path ./etc/default/locale -o -path ./var/cache/apt \
+    -o -path ./var/lib/apt/lists -o -path ./var/log \) -prune -o \
+    -exec getfattr --dump --no-dereference --match=- {} + > "$work/attrs"; then
+    log 'WARNING: cannot read xattrs; keeping CLI'; exit 0
+fi
+if grep -Eq '^(trusted|user)\.overlay\.(opaque|whiteout)=' "$work/attrs"; then
+    log 'WARNING: opaque/whiteout xattr; keeping CLI'; exit 0
+fi
+# udeb tar has no --exclude/-T. Select disjoint archive roots, descending
+# only into the ancestors of exclusions. All selected roots share one tar
+# invocation, preserving hardlinks across directories. Package paths have no
+# newlines; read -r preserves spaces and backslashes.
+if ! find . \( -path . -o -path ./etc -o -path ./etc/default -o -path ./var \
+    -o -path ./var/cache -o -path ./var/lib -o -path ./var/lib/apt \) -o \
+    \( -path ./boot -o -path ./etc/fstab -o -path ./etc/crypttab \
+    -o -path ./etc/default/locale -o -path ./var/cache/apt \
+    -o -path ./var/lib/apt/lists -o -path ./var/log \) -prune -o -print -prune \
+    > "$work/roots"; then
+    log 'WARNING: cannot enumerate layer; keeping CLI'; exit 0
+fi
+set --
+while IFS= read -r file; do set -- "$@" "$file"; done < "$work/roots"
+[ "$#" -gt 0 ] || { log 'empty layer; keeping CLI'; exit 0; }
+# A FIFO avoids a full uncompressed archive in RAM and lets POSIX sh check both
+# tar exit statuses. udeb has mknod (including type p), but no mkfifo applet.
+[ -d "$target" ] || { log "WARNING: target missing; keeping CLI"; exit 0; }
+mknod "$work/archive" p || exit 0
+tar c "$@" > "$work/archive" &
+producer=$!
+copy_status=0
+(cd "$target" && tar x < "$work/archive") || copy_status=1
+wait "$producer" || copy_status=1
+if [ "$copy_status" != 0 ]; then
+    log 'WARNING: copy failed; target may contain a partial layer'; exit 0
+fi
+# The selected roots omit these ancestor headers; restore their numeric mode
+# and ownership explicitly (all names below are fixed, without whitespace).
+for parent in . etc etc/default var var/cache var/lib var/lib/apt; do
+    if [ ! -d "$parent" ] || [ -L "$parent" ]; then continue; fi
+    # Fixed ancestor names; only numeric fields and permission bits are read.
+    # shellcheck disable=SC2012
+    metadata=$(ls -ldn "$parent" | awk '
+        function bit(c, yes) { return index(yes, c) > 0 }
+        {
+            m=$1; special=0
+            if (bit(substr(m,4,1), "sS")) special+=4
+            if (bit(substr(m,7,1), "sS")) special+=2
+            if (bit(substr(m,10,1), "tT")) special+=1
+            out=special
+            for (i=2; i<=8; i+=3) {
+                digit=4*bit(substr(m,i,1),"r") + 2*bit(substr(m,i+1,1),"w") + bit(substr(m,i+2,1),"xst")
+                out=out digit
+            }
+            print out, $3, $4
+        }')
+    # Numeric metadata only, intentionally word-split.
+    # shellcheck disable=SC2086
+    set -- $metadata
+    if [ "$#" != 3 ] || ! mkdir -p "$target/$parent" || ! chown "$2:$3" "$target/$parent" || ! chmod "$1" "$target/$parent"; then
+        log 'WARNING: directory metadata restore failed; inspect target'; exit 0
+    fi
+done
+if ! (cd "$target" && setfattr --no-dereference --restore="$work/attrs"); then
+    log 'WARNING: xattr/ACL restore failed; inspect target before use'; exit 0
+fi
+cd / || exit 0
+log 'layer applied (offline)'
+exit 0
