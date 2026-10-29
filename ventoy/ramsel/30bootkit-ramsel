@@ -1,0 +1,275 @@
+#!/bin/sh
+# 30bootkit-ramsel: 選んだ OS の層の列だけを tmpfs へ複写する casper-premount。
+#
+# 発動条件: カーネル引数に toram と bootkit.os=<os> の両方があるときだけ。
+# それ以外(どちらか欠け)では何もせず終了し、素の casper の動作を保つ。
+#
+# 動き (子プロセスで実行され、mountroot 本体への伝達はファイルで行う):
+#   1. 媒体(ISO)を探して読み取り専用で臨時マウントする。
+#   2. casper/bootkit-chains/<os>.list の層だけを /bootkit-ram (tmpfs) へ写す。
+#   3. /run/bootkit-ramsel/env に LIVEMEDIA=/bootkit-ram と TORAM の解除を書く。
+#      ORDER がこれを mountroot のシェルへ読み戻すため、casper 本体は
+#      その tmpfs を livefs_root として使い、copy_live_to の二重複写は起きない。
+#   4. 臨時マウントを外す。元の媒体は /cdrom 等へ一切マウントしない。
+# 複写の失敗時(RAM 不足・媒体なし・層の欠落・写し誤り)は理由を
+# /run/bootkit-ramsel/failed に書き、ORDER が mountroot 側で panic する。
+# 黙って媒体参照のまま続けることはない。
+#
+# 試験用の差し替え (本番の initramfs では既定値を使う):
+#   BOOTKIT_RAMSEL_CMDLINE / BOOTKIT_RAMSEL_MEMINFO /
+#   BOOTKIT_RAMSEL_RUN / BOOTKIT_RAMSEL_TARGET
+# busybox ash でも動く POSIX sh で書く。bash 固有の記法は使わない。
+
+set -eu
+
+CMDLINE="${BOOTKIT_RAMSEL_CMDLINE:-/proc/cmdline}"
+MEMINFO="${BOOTKIT_RAMSEL_MEMINFO:-/proc/meminfo}"
+RUN_DIR="${BOOTKIT_RAMSEL_RUN:-/run/bootkit-ramsel}"
+TARGET="${BOOTKIT_RAMSEL_TARGET:-/bootkit-ram}"
+
+# tmpfs の余裕 (KiB)。 squashfs の loop マウントと .disk 等を見込む。
+SLACK_KB=65536
+# 媒体が見えるまでの待ち (秒)。試験では BOOTKIT_RAMSEL_SCAN_WAIT で短くする。
+SCAN_WAIT="${BOOTKIT_RAMSEL_SCAN_WAIT:-30}"
+
+log() {
+    printf 'bootkit-ramsel: %s\n' "$*"
+}
+
+fail() {
+    # 親 (ORDER) が panic するための理由を残し、子は黙って抜ける。
+    mkdir -p "$RUN_DIR"
+    printf '%s\n' "$1" >"$RUN_DIR/failed"
+    log "失敗: $1"
+    exit 1
+}
+
+has_arg() {
+    # 完全一致の引数があるか。語分割が目的のため SC2013 は適用しない。
+    # shellcheck disable=SC2013
+    for word in $(cat "$CMDLINE"); do
+        if [ "$word" = "$1" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+bootkit_os() {
+    # shellcheck disable=SC2013
+    for word in $(cat "$CMDLINE"); do
+        case "$word" in
+        bootkit.os=*)
+            printf '%s\n' "${word#bootkit.os=}"
+            return 0
+            ;;
+        esac
+    done
+    return 1
+}
+
+valid_os() {
+    case "$1" in
+    '' | *[!a-z0-9-]* | -*)
+        return 1
+        ;;
+    esac
+    return 0
+}
+
+valid_layer_name() {
+    case "$1" in
+    *.squashfs)
+        case "$1" in
+        *[!A-Za-z0-9_.+-]* | */* | .* | *..*)
+            return 1
+            ;;
+        esac
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+mem_available_kb() {
+    awk '/^MemAvailable:/{ print $2; found=1; exit } END{ if (!found) exit 1 }' "$MEMINFO" 2>/dev/null ||
+        awk '/^MemFree:/{ f=$2 } /^Cached:/{ c=$2 } END{ if (f=="") exit 1; print f+c }' "$MEMINFO"
+}
+
+try_mount_media() {
+    # $1: デバイス、$2: マウント先。成功で 0。
+    if mount -o ro "$1" "$2" 2>/dev/null; then
+        return 0
+    fi
+    if mount -o ro -t iso9660 "$1" "$2" 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+find_media() {
+    # $1: os 名、$2: 作業マウント先。媒体を見つけてマウントし、パスを返す。
+    os="$1"
+    mnt="$2"
+    tried=""
+    # LIVEMEDIA (Ventoy の /dev/mapper/ventoy など) を最優先で試す。
+    if [ -n "${LIVEMEDIA:-}" ] && [ -e "$LIVEMEDIA" ] && [ ! -d "$LIVEMEDIA" ]; then
+        if try_mount_media "$LIVEMEDIA" "$mnt"; then
+            if [ -f "$mnt/casper/bootkit-chains/$os.list" ]; then
+                printf '%s\n' "$LIVEMEDIA"
+                return 0
+            fi
+            umount "$mnt" 2>/dev/null || true
+        fi
+        tried="$tried $LIVEMEDIA"
+    fi
+    # ブロック装置を順に試す。名前に空白は来ない前提 (initramfs 内)。
+    # 試験では BOOTKIT_RAMSEL_DEVICES に空白区切りの候補を与える。
+    cands="${BOOTKIT_RAMSEL_DEVICES:-/dev/sr* /dev/sd* /dev/vd* /dev/hd* /dev/xvd* /dev/nvme*n*p* /dev/mapper/* /dev/dm-*}"
+    # shellcheck disable=SC2086
+    for dev in $cands; do
+        [ -e "$dev" ] || continue
+        case "$dev" in
+        *'*' | */control)
+            continue
+            ;;
+        esac
+        case "$tried" in
+        *" $dev "*) continue ;;
+        esac
+        tried="$tried $dev "
+        if try_mount_media "$dev" "$mnt"; then
+            if [ -f "$mnt/casper/bootkit-chains/$os.list" ]; then
+                printf '%s\n' "$dev"
+                return 0
+            fi
+            umount "$mnt" 2>/dev/null || true
+        fi
+    done
+    return 1
+}
+
+main() {
+    if ! has_arg toram; then
+        exit 0
+    fi
+    os="$(bootkit_os 2>/dev/null || true)"
+    if [ -z "${os:-}" ]; then
+        exit 0
+    fi
+    if ! valid_os "$os"; then
+        fail "bootkit.os の値が不正: $os"
+    fi
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm settle --timeout=10 2>/dev/null || true
+    fi
+
+    scan_mnt="$RUN_DIR/media"
+    mkdir -p "$RUN_DIR" "$scan_mnt"
+    media=""
+    waited=0
+    while [ "$waited" -le "$SCAN_WAIT" ]; do
+        if media="$(find_media "$os" "$scan_mnt")"; then
+            break
+        fi
+        media=""
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if [ -z "$media" ]; then
+        fail "媒体が見えない (bootkit-chains/$os.list を持つ装置なし。LIVEMEDIA=${LIVEMEDIA:-未設定})"
+    fi
+    log "媒体: $media (toram 選択複写、os=$os)"
+
+    list="$scan_mnt/casper/bootkit-chains/$os.list"
+    tmp_list="$RUN_DIR/chain.list"
+    : >"$tmp_list"
+    total=0
+    # shellcheck disable=SC2162
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="$(printf '%s' "$line" | tr -d '\r')"
+        case "$line" in
+        '' | \#*) continue ;;
+        esac
+        if ! valid_layer_name "$line"; then
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "層名が不正: $line"
+        fi
+        if [ ! -f "$scan_mnt/casper/$line" ]; then
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "層が媒体に無い: $line"
+        fi
+        printf '%s\n' "$line" >>"$tmp_list"
+        size="$(wc -c <"$scan_mnt/casper/$line")"
+        total=$((total + size))
+    done <"$list"
+    if [ ! -s "$tmp_list" ]; then
+        umount "$scan_mnt" 2>/dev/null || true
+        fail "連鎖が空: $list"
+    fi
+    need_kb=$((total / 1024 + SLACK_KB))
+    avail_kb="$(mem_available_kb 2>/dev/null || printf '0\n')"
+    log "連鎖の合計: $total バイト、必要: ${need_kb} KiB、利用可: ${avail_kb} KiB"
+    case "$avail_kb" in
+    '' | *[!0-9]*)
+        umount "$scan_mnt" 2>/dev/null || true
+        fail "メモリ量を読めない"
+        ;;
+    esac
+    if [ "$avail_kb" -lt "$need_kb" ]; then
+        umount "$scan_mnt" 2>/dev/null || true
+        fail "RAM が足りない (必要 ${need_kb} KiB、利用可 ${avail_kb} KiB)。媒体参照のまま続けない"
+    fi
+
+    mkdir -p "$TARGET"
+    if ! mount -t tmpfs -o "size=${need_kb}k" tmpfs "$TARGET"; then
+        umount "$scan_mnt" 2>/dev/null || true
+        fail "tmpfs を作れない (size=${need_kb}k)"
+    fi
+    mkdir -p "$TARGET/casper"
+    while IFS= read -r layer; do
+        [ -n "$layer" ] || continue
+        if ! cp -a "$scan_mnt/casper/$layer" "$TARGET/casper/$layer"; then
+            umount "$TARGET" 2>/dev/null || true
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "複写に失敗: $layer"
+        fi
+        base="${layer%.squashfs}"
+        for ext in manifest manifest.full size; do
+            if [ -f "$scan_mnt/casper/$base.$ext" ]; then
+                cp -a "$scan_mnt/casper/$base.$ext" "$TARGET/casper/$base.$ext" 2>/dev/null || true
+            fi
+        done
+        src_size="$(wc -c <"$scan_mnt/casper/$layer")"
+        dst_size="$(wc -c <"$TARGET/casper/$layer")"
+        if [ "$src_size" != "$dst_size" ]; then
+            umount "$TARGET" 2>/dev/null || true
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "写し誤り (大きさ不一致): $layer"
+        fi
+    done <"$tmp_list"
+    if [ -d "$scan_mnt/.disk" ]; then
+        cp -a "$scan_mnt/.disk" "$TARGET/.disk" 2>/dev/null || true
+    fi
+    if [ -f "$scan_mnt/casper/install-sources.yaml" ]; then
+        cp -a "$scan_mnt/casper/install-sources.yaml" "$TARGET/casper/install-sources.yaml" 2>/dev/null || true
+    fi
+
+    umount "$scan_mnt" 2>/dev/null || fail "媒体を外せない ($media)。媒体参照のまま続けない"
+    rmdir "$scan_mnt" 2>/dev/null || true
+
+    {
+        printf 'LIVEMEDIA=%s\n' "$TARGET"
+        printf 'NOPERSISTENT=Yes\n'
+        printf 'export LIVEMEDIA NOPERSISTENT\n'
+        printf 'unset TORAM\n'
+    } >"$RUN_DIR/env"
+    {
+        printf 'export LIVEMEDIA="%s"\n' "$TARGET"
+        printf 'export NOPERSISTENT="Yes"\n'
+    } >>/etc/casper.conf
+    log "複写が完了: $media を外した。LIVEMEDIA=$TARGET で続ける"
+    exit 0
+}
+
+main "$@"

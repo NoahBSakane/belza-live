@@ -1,0 +1,16 @@
+# bootkit-ramsel 用の置換 ORDER (casper 26.04.2 準拠)。
+# 標準の2行 (10driver_updates、20iso_scan) に選択複写の接続を追加したもの。
+# Ventoy の injection / 試作 ISO の initrd 再構成で
+# scripts/casper-premount/ORDER をこの内容で置き換える。
+# 30bootkit-ramsel は子プロセスで動き、結果をファイルで返す。
+# env があれば mountroot のシェルへ読み戻し (LIVEMEDIA の切替えと TORAM の解除)、
+# failed があれば mountroot 側で panic する (黙って媒体参照のまま続けない)。
+# casper 側の標準行が変わったら組み立て時に検出して止める (make-trial-iso.sh)。
+/scripts/casper-premount/10driver_updates "$@"
+[ -e /conf/param.conf ] && . /conf/param.conf
+/scripts/casper-premount/20iso_scan "$@"
+[ -e /conf/param.conf ] && . /conf/param.conf
+/scripts/casper-premount/30bootkit-ramsel "$@"
+[ -e /conf/param.conf ] && . /conf/param.conf
+if [ -f /run/bootkit-ramsel/env ]; then . /run/bootkit-ramsel/env; fi
+if [ -f /run/bootkit-ramsel/failed ]; then panic "bootkit-ramsel: $(cat /run/bootkit-ramsel/failed)"; fi
