@@ -67,7 +67,7 @@ amd64 の起動メニューにある `Hardware survey: generic, auto`、`Hardwar
 
 アーキテクチャごとに1つの ISO(`bootkit-linux-amd64.iso`・`bootkit-linux-arm64.iso`)を作り、起動メニューの `module=cli`・`module=icewm`・`module=lxqt` で選ぶ。既定は IceWM。CLI の `filesystem.squashfs` に、選んだ GUI の差分層だけを重ねる。[層構成と検証条件](docs/layers.md)を参照。
 
-Debian Installer の `Start installer` サブメニューで、導入するフレーバーを選ぶ。CLI 基本層をコピーした直後、ユーザー作成前に選んだ GUI 層を移植するため、GUI の導入にネットワークは不要。LXQt セッションの Calamares も基本層、LXQt 層の順に展開する。実際の導入・初回起動はまだ未検証で、[QEMU の導入試験](docs/installer-verification.md)で確認する。
+Debian Installer の `Start installer` サブメニューで、導入するフレーバーを選ぶ。CLI 基本層をコピーした直後、ユーザー作成前に選んだ GUI 層を移植するため、GUI の導入にネットワークは不要。LXQt セッションの Calamares も基本層、LXQt 層の順に展開する。QEMU(2026-10-29)では、amd64(UEFI)と arm64(UEFI)の `Start installer` による icewm・lxqt・cli の導入と、amd64 の `bootkit.flavor=` なしの導入(cli 扱い)が、ネットワークなしで完了し、再起動後に `dpkg --audit` が無出力・`apt-get check` が終了 0・選んだ GUI が起動した。実機(Ventoy からの起動)、amd64 BIOS(syslinux)での導入、Calamares、フレーバーの未知の値・層の欠落・mount 失敗の異常系は未検証で、詳しくは[QEMU の導入試験](docs/installer-verification.md)を参照。
 
 層は追加・上書きだけで、削除を表す whiteout・opaque は許さず、ビルド時に検査する。d-i は `bootkit.flavor` がない場合・cli・未知の値では CLI だけを導入する。層の欠落・マウント失敗・whiteout 検出・属性の読出手段不足の場合も、理由を画面と `/var/log/syslog` に出し、CLI のまま続ける。コピー途中や属性復元の失敗では一部だけ適用される場合があるため、同じログの警告を確認する。
 
