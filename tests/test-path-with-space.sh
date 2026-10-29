@@ -17,6 +17,10 @@ COPY=$WORK/Noah\ B.\ Sakane/bootkit-linux
 mkdir -p "$COPY"
 for source do
     # 一致しなかった隠しファイルの glob は除く。壊れた symlink は保持する。
+    # build/ は機械生成の大容量成果物で、空白パスの試験対象外のため除く。
+    if [ "$source" = "$HERE/build" ]; then
+        continue
+    fi
     if [ -e "$source" ] || [ -L "$source" ]; then
         cp -R "$source" "$COPY/"
     fi
@@ -27,7 +31,7 @@ TMPDIR=$COPY/.test-tmp
 export TMPDIR
 cd "$COPY"
 tests='test-diag-packages.sh test-flavor-files.sh test-forky-hook.sh test-boot-config.sh test-survey.sh test-disk-guard.sh test-release-assets.sh'
-for optional in test-additive.sh test-calamares-layers.sh test-installer-layer.sh test-installer-layer-mutations.sh test-layers.sh test-layer-mutations.sh test-ventoy-bundle.sh test-qemu-boot-args.sh test-forky-deps.py; do
+for optional in test-additive.sh test-calamares-layers.sh test-installer-layer.sh test-installer-layer-mutations.sh test-layers.sh test-layer-mutations.sh test-ventoy-bundle.sh test-qemu-boot-args.sh test-ubuntu-merge.sh test-forky-deps.py; do
     if [ -f "tests/$optional" ]; then tests="$tests $optional"; fi
 done
 # 試験ごとの作業領域は独立。コピーの時間・容量はリポジトリの総容量に比例する。
