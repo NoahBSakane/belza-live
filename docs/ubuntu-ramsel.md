@@ -1,7 +1,5 @@
 # 統合 ISO の RAM 選択複写 (bootkit-ramsel)
 
-現行の仕様を中心に書く。経緯は書かない。未確認の点は末尾に集める。
-
 ## 動作
 
 カーネル引数に `toram` と `bootkit.os=<os>` (os は `ubuntu`・`lubuntu`・`server`)
@@ -14,6 +12,12 @@
 理由を出して停止する (`panic` 相当)。黙って媒体参照のまま続けない。
 `toram` が無いとき、または `bootkit.os` が無いときは何もしない
 (素の casper の動作)。
+
+層が L 個、合計 S バイトのとき、サイズの見積もり・照合は `stat -c` に
+よる O(L)、データ複写は O(S)。`wc` による全データの余計な読み直しを避ける。
+`stat -c` が無い単体試験環境では `wc` へ戻る。予期しない I/O の異常終了も
+`failed` に残して親が停止できるようにする。子の終了コードも親が照合し、
+理由ファイルを残せなかった異常終了も停止する。
 
 RAM の見積もりは複写前に行う。連鎖の合計に 64 MiB の余裕を足した量を
 `/proc/meminfo` の `MemAvailable` (無ければ `MemFree`+`Cached`) と比べ、
@@ -43,8 +47,8 @@ RAM の見積もりは複写前に行う。連鎖の合計に 64 MiB の余裕�
   (premount が `TORAM` を解除するため、二重の複写は起きない)。
 - `bootkit.os=<os>`: 層の連鎖の選択。`casper/bootkit-chains/<os>.list` を読む。
 - `layerfs-path=<leaf 層>`: 層の重ね順の指定 (casper の標準引数)。
-  試作 ISO では各 OS の末端層を指定する。
-  例: `layerfs-path=server.minimal.server.installer.generic.squashfs`。
+  実統合 ISO では各 OS の末端層を指定する。
+  例: `layerfs-path=common.server.squashfs`。
 - `console=ttyS0,115200`: 検証用の serial 出力。実運用には要らない。
 
 `toram` と `bootkit.os` のどちらかが無い起動では本処理は何もしない。
@@ -57,8 +61,8 @@ RAM の見積もりは複写前に行う。連鎖の合計に 64 MiB の余裕�
   (casper の `layerfs-path` の規則)。
 - `bootkit.os=<os>` が OS を指定する。
 - 本処理は層の中身を見ない。層の再構成と同一性の保証は T1 の担当。
-- T1 の ISO ができたら、試作 ISO は捨て、`ventoy/ramsel/` の成果物
-  (下の injection) を載せ替える作り。
+- 実統合 ISO は `tools/ubuntu-merge/assemble.sh` が追加 cpio と GRUB を
+  組み込む。Ventoy 用 injection も同じ 2 ファイルから生成する。
 - 層名の制約: casper の `layerfs-path` 導出は、末端層から点を1つずつ削って
   親を列挙し、点なし名の層まで要求する。そのため各連鎖の根は点なし名に
   する (例: `server` ← `server.ubuntu-server` ← ...)。
@@ -75,10 +79,15 @@ python3 で、Ventoy の injection に載せる前提の成果物である。
 - `ORDER`: 置換する `/scripts/casper-premount/ORDER`。
   標準の 2 行に本台本の呼出しと読み戻し・失敗時の `panic` を足したもの。
 - `make-injection.sh`: 上の 2 点を `bootkit-ramsel-injection.tar.gz` に固める。
+- `make-cpio.py`: 同じ 2 点を再現可能な gzip/newc に固める。実統合 ISO は
+  toram 項目だけ `initrd /casper/initrd.<os> /casper/bootkit-ramsel.cpio.gz` と
+  連結指定する。4,238 バイトの追加アーカイブで、3 OS の実 ISO 起動で
+  連結後の premount 実行を確認済み。
 - `rebuild-initrd.py`: 公式 initrd の主部に上 2 点を入れて再構成する
   (試作 ISO 用。標準 ORDER が想定と違う場合は止める)。
 - `make-trial-iso.sh`: 試作の統合 ISO を組む (約 11GB、`build/` に出力)。
-- `verify-qemu.py`: QEMU での検証駆動 (下の手順)。
+- `verify-qemu.py`: QEMU での検証駆動 (下の手順)。UNIX socket が使えない
+  環境では `--transport pipe` でワークツリー内の FIFO と stdio を使う。
 
 試験は `tests/test-ramsel.sh` (`make test` に含まれる)。QEMU の実起動は
 含まず、構文・`ORDER` の固定・台本の単体試験 (成功・無発動・RAM 不足・
@@ -134,21 +143,49 @@ Ventoy 1.1.18 の `default-hook.sh` との干渉の調査結果
 
 ## 検証結果
 
-検証の駆動は `ventoy/ramsel/verify-qemu.py`。試作 ISO を UEFI (OVMF) で
-起動し、grub 項目を番号で選ぶ。serial (`ttyS0`) でログイン・操作し、
-HMP で撮影と ISO の取り外しを行う。公式 ISO の比較・対照は BIOS +
-`-kernel`・`-initrd`・`-append` で起動する (比較対象の版を変えないため。
-媒体の扱いは起動方式に依らない)。
+2026-10-29、`verify-qemu.py` で実統合 ISO の UEFI / GRUB 項目を選択した。
+serial で `/proc/cmdline`・`df -B1`・`/proc/meminfo`・`findmnt`・
+`/proc/mounts`・`losetup -a` を記録し、HMP で撮影と ISO 排出を行った。
+記録は `build/evidence/B2/`。画面は Server が subiquity、Lubuntu が LXQt、
+Ubuntu が GNOME のログイン画面と live セッションまでを確認した。
 
-(以下、実測値を書く)
+| OS | 選択した層の合計 (バイト) | tmpfs 使用量 (バイト) | 余分 (バイト) | 排出後 |
+| --- | --- | --- | --- | --- |
+| Server | 1,515,560,960 | 1,515,585,536 | 24,576 | 層の読出し・Python・apt check 成功 |
+| Lubuntu | 3,749,933,056 | 3,749,957,632 | 24,576 | 全 3 層読出し・Python・apt check 成功 |
+| Ubuntu | 4,722,253,824 | 4,722,278,400 | 24,576 | 全 3 層読出し・Python・apt check 成功 |
+
+`/cdrom/casper` は選択層だけで、pool / 他 OS の層 / initrd は無い。
+元 sr0 mount は残らず、層を参照する loop は tmpfs 内を指していた。
+HMP の `eject -f cd0` 後、キャッシュを落として読み出し、新規プログラムを
+起動した。通常項目の同じ排出対照は、各 OS とも I/O エラーになった。
+
+公式の素 toram は、追加 cpio を付けず元の kernel / initrd で BIOS direct
+起動し、同じ q35 / ide-cd 接続で計測した。root の使う層と、casper が
+コピーする媒体全体の量を分けて比較する。
+
+| OS | 公式の素 toram 使用量 (バイト) | 選択コピー使用量 (バイト) | 減った量 (バイト) |
+| --- | --- | --- | --- |
+| Server | 2,921,447,424 | 1,515,585,536 | 1,405,861,888 |
+| Lubuntu | 3,921,702,912 | 3,749,957,632 | 171,745,280 |
+
+公式 Server / Lubuntu の `MemAvailable` は、それぞれ 2,529,776 /
+1,629,928 KiB。元の媒体全体を載せるため、選択層以外の pool・boot・initrd も
+含む。証拠の接頭辞は `official-server-toram` / `official-lubuntu-toram`。
+統合 ISO の UEFI 起動そのものとは bootloader の条件が異なる。
+
+RAM 不足は Server toram / 1,280MiB の VM で確認。必要 1,582,669,824 バイト、
+利用可能 1,028,845,568 バイトと表示し、コピー前に initramfs shell で停止した
+(`server-short-1280`)。元媒体を参照したまま黙って起動を続けることはなかった。
+追加 cpio の連結は実起動で動作したため、公式 initrd の再構成は不要だった。
 
 ## 既知の制約・未確認の点
 
 - 実機・Ventoy の実起動・Secure Boot は未検証。
-- 試作 ISO を `bootkit.os` 無しで起動すると、3 OS の層が混ざって重なる。
-  T1 の `grub.cfg` は全項目に `bootkit.os` を付けること。
-- GUI のメニュー操作は serial 経由の shell 操作と撮影で代用し、
-  項目を開く操作までは行っていない。
+- 実統合 ISO は全 9 項目で `layerfs-path` と `bootkit.os` を明示する。
+  層の選択は `layerfs-path`、RAM 選択複写の選択は `bootkit.os` が担う。
+- GUI の確認は起動画面と Lubuntu の Try 選択まで。通常のアプリの
+  GUI 操作や、日本語表示・入力・インストールは未検証。
 - premount 時点の `/dev/mapper/ventoy` の可視性は未確認 (再試行あり)。
 - 再層化 (B2) 後の層名・連鎖が変われば、`.list` と `layerfs-path` を
   合わせ直す (本処理の変更は要らない)。

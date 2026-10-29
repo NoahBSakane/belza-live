@@ -26,6 +26,7 @@ CMDLINE="${BOOTKIT_RAMSEL_CMDLINE:-/proc/cmdline}"
 MEMINFO="${BOOTKIT_RAMSEL_MEMINFO:-/proc/meminfo}"
 RUN_DIR="${BOOTKIT_RAMSEL_RUN:-/run/bootkit-ramsel}"
 TARGET="${BOOTKIT_RAMSEL_TARGET:-/bootkit-ram}"
+CONFIG="${BOOTKIT_RAMSEL_CONFIG:-/etc/casper.conf}"
 
 # tmpfs の余裕 (KiB)。 squashfs の loop マウントと .disk 等を見込む。
 SLACK_KB=65536
@@ -96,6 +97,13 @@ mem_available_kb() {
         awk '/^MemFree:/{ f=$2 } /^Cached:/{ c=$2 } END{ if (f=="") exit 1; print f+c }' "$MEMINFO"
 }
 
+file_bytes() {
+    # L 層・合計 S バイトに対して、見積り・サイズ照合は O(L)、複写は O(S)。
+    # wc で全データを余計に読み直さない。公式 initrd の busybox stat を使う。
+    # macOS の単体試験等、stat -c が無い環境では同じ値の wc に戻る。
+    stat -c %s "$1" 2>/dev/null || wc -c <"$1"
+}
+
 try_mount_media() {
     # $1: デバイス、$2: マウント先。成功で 0。
     if mount -o ro "$1" "$2" 2>/dev/null; then
@@ -160,6 +168,12 @@ main() {
     if ! valid_os "$os"; then
         fail "bootkit.os の値が不正: $os"
     fi
+    # set -e による想定外の失敗も、通常の媒体起動への黙った復帰にしない。
+    status=0
+    trap 'status=$?; if [ "$status" -ne 0 ] && [ ! -f "$RUN_DIR/failed" ]; then
+        mkdir -p "$RUN_DIR"
+        printf "起動処理が異常終了 (status=%s)\n" "$status" >"$RUN_DIR/failed"
+    fi' 0
     if command -v udevadm >/dev/null 2>&1; then
         udevadm settle --timeout=10 2>/dev/null || true
     fi
@@ -200,7 +214,7 @@ main() {
             fail "層が媒体に無い: $line"
         fi
         printf '%s\n' "$line" >>"$tmp_list"
-        size="$(wc -c <"$scan_mnt/casper/$line")"
+        size="$(file_bytes "$scan_mnt/casper/$line")"
         total=$((total + size))
     done <"$list"
     if [ ! -s "$tmp_list" ]; then
@@ -240,8 +254,8 @@ main() {
                 cp -a "$scan_mnt/casper/$base.$ext" "$TARGET/casper/$base.$ext" 2>/dev/null || true
             fi
         done
-        src_size="$(wc -c <"$scan_mnt/casper/$layer")"
-        dst_size="$(wc -c <"$TARGET/casper/$layer")"
+        src_size="$(file_bytes "$scan_mnt/casper/$layer")"
+        dst_size="$(file_bytes "$TARGET/casper/$layer")"
         if [ "$src_size" != "$dst_size" ]; then
             umount "$TARGET" 2>/dev/null || true
             umount "$scan_mnt" 2>/dev/null || true
@@ -267,7 +281,7 @@ main() {
     {
         printf 'export LIVEMEDIA="%s"\n' "$TARGET"
         printf 'export NOPERSISTENT="Yes"\n'
-    } >>/etc/casper.conf
+    } >>"$CONFIG"
     log "複写が完了: $media を外した。LIVEMEDIA=$TARGET で続ける"
     exit 0
 }

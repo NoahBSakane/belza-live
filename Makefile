@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
-.PHONY: help test test-survey test-boot verify-ubuntu-merge ramsel-injection ramsel-trial-iso
+.PHONY: help test test-survey test-boot verify-ubuntu-merge ramsel-injection ramsel-cpio ramsel-trial-iso
 help:
-	@printf '%s\n' 'make help         ターゲット一覧' 'make test         通信不要の全テスト(並列)' 'make test-survey  検査スクリプトの試験' 'make test-boot    起動設定の試験' 'make verify-ubuntu-merge  統合層の同一性検証(実 ISO・重量級)' 'make ramsel-injection  Ventoy injection のアーカイブを作る' 'make ramsel-trial-iso  試作の統合 ISO を組む(約 11GB、build/)'
+	@printf '%s\n' 'make help         ターゲット一覧' 'make test         通信不要の全テスト(並列)' 'make test-survey  検査スクリプトの試験' 'make test-boot    起動設定の試験' 'make verify-ubuntu-merge  統合層の同一性検証(実 ISO・重量級)' 'make ramsel-injection  Ventoy injection のアーカイブを作る' 'make ramsel-cpio  公式 initrd の後へ連結する cpio を作る' 'make ramsel-trial-iso  試作の統合 ISO を組む(約 11GB、build/)'
 test:
 	@sh tests/run-tests.sh
 test-survey:
@@ -16,3 +16,7 @@ ramsel-injection:
 	@sh ventoy/ramsel/make-injection.sh
 ramsel-trial-iso:
 	@sh ventoy/ramsel/make-trial-iso.sh
+
+ramsel-cpio:
+	@mkdir -p build
+	@python3 -I ventoy/ramsel/make-cpio.py build/bootkit-ramsel.cpio.gz

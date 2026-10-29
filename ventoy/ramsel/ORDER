@@ -11,6 +11,10 @@
 /scripts/casper-premount/20iso_scan "$@"
 [ -e /conf/param.conf ] && . /conf/param.conf
 /scripts/casper-premount/30bootkit-ramsel "$@"
+bootkit_ramsel_status=$?
+if [ "$bootkit_ramsel_status" -ne 0 ] && [ ! -f /run/bootkit-ramsel/failed ]; then
+    panic "bootkit-ramsel: 選択複写の起動処理が異常終了 (status=$bootkit_ramsel_status)。媒体参照のまま続けない"
+fi
 [ -e /conf/param.conf ] && . /conf/param.conf
 if [ -f /run/bootkit-ramsel/env ]; then . /run/bootkit-ramsel/env; fi
 if [ -f /run/bootkit-ramsel/failed ]; then panic "bootkit-ramsel: $(cat /run/bootkit-ramsel/failed)"; fi

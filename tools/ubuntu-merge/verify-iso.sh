@@ -12,16 +12,21 @@ TMP=$HERE/build/work/iso-new
 WORKBASE=$HERE/build/work/stage/verify-iso-work
 [ -f "$ISO" ] || { echo "no ISO: $ISO" >&2; exit 2; }
 [ -d "$HERE/build/work/inv" ] || { echo "no inventory" >&2; exit 2; }
-mkdir -p "$TMP"
+mkdir -p "$TMP" "$WORKBASE"
 : > "$LOG"
 log() { printf '%s %s\n' "$(date '+%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
 run_verify() {
     name=$1; newdir=$2
     log "verify from $name"
     rm -rf "$WORKBASE/work-$name"
-    python3 -I "$TOOLS/verify.py" "$HERE/build/work/inv" \
+    if python3 -I "$TOOLS/verify.py" "$HERE/build/work/inv" \
         "$HERE/build/work/plan/ochains.json" "$newdir" \
-        "$HERE/build/work/plan/chains.json" "$WORKBASE/work-$name" 2>&1 | tee -a "$LOG"
+        "$HERE/build/work/plan/chains.json" "$WORKBASE/work-$name" > "$WORKBASE/$name.log" 2>&1; then
+        cat "$WORKBASE/$name.log" | tee -a "$LOG"
+    else
+        cat "$WORKBASE/$name.log" | tee -a "$LOG"
+        return 1
+    fi
 }
 log "control: layers straight from build"
 run_verify build "$HERE/build/layers"

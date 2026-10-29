@@ -31,7 +31,7 @@ TMPDIR=$COPY/.test-tmp
 export TMPDIR
 cd "$COPY"
 tests='test-diag-packages.sh test-flavor-files.sh test-forky-hook.sh test-boot-config.sh test-survey.sh test-disk-guard.sh test-release-assets.sh'
-for optional in test-additive.sh test-calamares-layers.sh test-installer-layer.sh test-installer-layer-mutations.sh test-layers.sh test-layer-mutations.sh test-ventoy-bundle.sh test-qemu-boot-args.sh test-ubuntu-merge.sh test-forky-deps.py; do
+for optional in test-additive.sh test-calamares-layers.sh test-installer-layer.sh test-installer-layer-mutations.sh test-layers.sh test-layer-mutations.sh test-ventoy-bundle.sh test-qemu-boot-args.sh test-ubuntu-merge.sh test-ubuntu-merge-boot.sh test-forky-deps.py; do
     if [ -f "tests/$optional" ]; then tests="$tests $optional"; fi
 done
 # 試験ごとの作業領域は独立。コピーの時間・容量はリポジトリの総容量に比例する。

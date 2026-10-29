@@ -94,6 +94,7 @@ run_script() {
     mkdir -p "$RUN" "$TARGET"
     export BOOTKIT_RAMSEL_CMDLINE=$WORK/cmdline BOOTKIT_RAMSEL_MEMINFO=$WORK/meminfo
     export BOOTKIT_RAMSEL_RUN=$RUN BOOTKIT_RAMSEL_TARGET=$TARGET
+    export BOOTKIT_RAMSEL_CONFIG=$WORK/casper.conf
     export BOOTKIT_RAMSEL_SCAN_WAIT=1 FIXTURE_MEDIA=$MEDIA MOUNT_LOG=$WORK/mount-$1.log
     : >"$WORK/dev-fake"
     export BOOTKIT_RAMSEL_DEVICES=$WORK/dev-fake
@@ -152,5 +153,20 @@ env_for 'BOOT_IMAGE=x toram bootkit.os=broken --- quiet' 'MemAvailable:    80000
 [ "$(run_script broken)" = 1 ] || fail '欠落層で止まらない'
 grep -Fq '層が媒体に無い' "$WORK/run-broken/failed" || fail '理由が違う'
 ok '欠落層は失敗する'
+
+# 想定外の I/O 失敗でも failed が残り、親が panic できる。
+cat >"$STUBS/stat" <<'STUB'
+#!/bin/sh
+exit 1
+STUB
+cat >"$STUBS/wc" <<'STUB'
+#!/bin/sh
+exit 1
+STUB
+chmod +x "$STUBS/stat" "$STUBS/wc"
+env_for 'toram bootkit.os=test' 'MemAvailable:    8000000 kB'
+[ "$(run_script io-error)" = 1 ] || fail 'I/O 異常終了で成功した'
+grep -Fq '起動処理が異常終了' "$WORK/run-io-error/failed" || fail '異常終了の理由が無い'
+ok '想定外の I/O 異常終了も failed'
 
 printf 'ALL OK\n'
