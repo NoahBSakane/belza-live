@@ -128,6 +128,16 @@ SHA-256・デバイス番号で、時刻は数えるだけで合否に使わな�
 (27.62%)小さい。起動設定の追記を含む実ファイルの大きさである。
 既存 ISO の更新は起動設定と cpio が対象で、層・pool の再生成は新規組立で行う。
 
+現行の統合 ISO は、ramsel の画面メッセージを ASCII 英語にした追加 cpio
+(`casper/bootkit-ramsel.cpio.gz`)へ差し替えたもので、9,655,549,952 バイト、
+SHA-256 `48d88241cfab4a78f1d104319185a69c038fc988e2cfac5de9e708c81731ad51`。
+差は cpio と ISO のボリューム情報だけで、層・pool・`grub.cfg` は不変
+(casper 183 件・pool 589 件の名前と大きさを照合)。下記の起動・Ventoy・
+オフラインインストールの検証は、差し替え前の ISO
+(SHA-256 `761b156da9d45fd9b666d6a6cb42dd4fd1e961063c8a7bfeab6937ba560a7d04`)
+で行った。差し替え後の ISO では、Lubuntu の RAM 不足の停止画面(VGA で英語の理由を表示)と、
+Server の toram・取り外し後の全層読み出し・Python・APT を QEMU で確認した。
+
 各 OS の連鎖の合計(起動でその OS の層の列として RAM に載る量。
 選択複写の対象):
 
