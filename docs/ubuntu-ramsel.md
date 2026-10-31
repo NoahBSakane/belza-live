@@ -149,6 +149,55 @@ RAM 不足は Server toram / 1,280MiB の VM で確認。必要 1,582,669,824 �
 (`server-short-1280`)。元媒体を参照したまま黙って起動を続けることはなかった。
 追加 cpio の連結は実起動で動作したため、公式 initrd の再構成は不要だった。
 
+2026-10-31、同じ B2 ISO の UEFI / TCG で Ubuntu と Lubuntu も確認した。
+いずれも複写前に RAM 不足の理由を serial に記録し、initramfs shell で停止した。
+
+| OS | VM RAM (MiB) | 必要 (KiB) | MemAvailable (KiB) | 証拠の接頭辞 |
+| --- | --- | --- | --- | --- |
+| Ubuntu | 4,096 | 4,677,112 | 3,603,936 | `ubuntu-short` |
+| Lubuntu | 3,072 | 3,727,580 | 2,585,520 | `lubuntu-short` |
+
+証拠は `build/evidence/e-quick/` の serial 原本・整形ログ・`-panic.png`。
+停止画面では日本語が文字化けし、理由の全文を読めない。停止動作と serial の
+理由は確認済みだが、VGA 画面だけで理由を読めるという結果ではない。
+
+## safe graphics の追加検証
+
+2026-10-31、同じ B2 ISO の UEFI / TCG、ネットワークなしで確認。
+各 OS の `/proc/cmdline` に対象の `bootkit.os`・`layerfs-path` と `nomodeset` がある。
+証拠は `build/evidence/e-quick/` に保存する。
+
+| OS | VM RAM (MiB) | 画面 | 証拠の接頭辞 |
+| --- | --- | --- | --- |
+| Server | 4,096 | subiquity の言語選択画面 | `server-safe` |
+| Lubuntu | 6,144 | Try 選択後の LXQt デスクトップ | `lubuntu-safe-live` |
+| Ubuntu | 8,192 | GNOME Live デスクトップ | `ubuntu-safe-live` |
+
+Lubuntu は仮想端末 2 の Try Lubuntu を選択した。serial の自動ログイン待ちとは
+別に、GUI の端末から `cat /proc/cmdline | sudo tee /dev/ttyS0` で起動引数を取得した。
+`lxqt-session` の PID も同じ方法で取得した。Ubuntu は Live ユーザー (UID 1000) の
+`gnome-shell --mode=ubuntu`、仮想端末 2 のアクティブな Wayland セッションと
+デスクトップを確認した。Welcome ウィンドウを閉じた状態の画面も保存した。
+
+## 統合 ISO の BIOS CD-ROM 起動
+
+2026-10-31、QEMU / SeaBIOS / pc / TCG、ネットワークなしで、ISO を読み取り専用
+CD-ROM として起動した。Ventoy 経由や kernel / initrd の直接指定ではない。
+ISO の GRUB の toram 項目を選択し、媒体の取り外しは行っていない。
+
+| OS | VM RAM (MiB) | 層合計 (バイト) | tmpfs 使用量 (バイト) | 操作 |
+| --- | --- | --- | --- | --- |
+| Lubuntu | 6,144 | 3,749,933,056 | 3,749,957,632 | 全 3 層読出し・Python・APT 成功 |
+| Ubuntu | 8,192 | 4,722,253,824 | 4,722,278,400 | 全 3 層読出し・Python・APT 成功 |
+
+`/cdrom` は tmpfs で、3 層の名前・サイズが選択 OS と一致した。
+`READ_LAYER_COUNT=3`、`MEDIA_READ_RC=0`、`PY_OK`、`APT_RC=0` を取得。
+証拠は `build/evidence/e-quick/` の `lubuntu-bios*` / `ubuntu-bios-login*`。
+既存 `verify-qemu.py --mode bios-direct` は kernel / initrd の直接指定なので、
+同ディレクトリの `run-iso-bios.py` で SeaBIOS の CD-ROM / GRUB 起動に接続した。
+QEMU コマンドに pflash・kernel・initrd の直接指定はなく、ROM 情報にも
+`bios-256k.bin` がある。
+
 ## 既知の制約・未確認の点
 
 - 実機・Secure Boot は未検証。Ventoy の QEMU 起動は下記参照。

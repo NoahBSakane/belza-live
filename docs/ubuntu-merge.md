@@ -110,7 +110,7 @@ SHA-256・デバイス番号で、時刻は数えるだけで合否に使わな�
   `pool/`(3 OS の和集合。同パスは同サイズを確認済みで競合なし)。
   `--no-pool` で pool なし版も作れる。
 - BIOS(El Torito + MBR)・UEFI(El Torito Alt-Boot + GPT)の起動レコードを収録する。
-  実 ISO の起動検証は UEFI。統合 ISO の BIOS 実起動は未検証。
+  実 ISO は UEFI の 3 OS と、SeaBIOS / CD-ROM の Lubuntu・Ubuntu toram で起動確認済み。
 
 素の casper の `toram` は ISO 全体を RAM に載せる。本 ISO の toram 項目は
 `ventoy/ramsel/` の premount で選んだ連鎖だけを複写し、元媒体を外す。
@@ -181,6 +181,9 @@ Lubuntu 通常の画像取得時は `systemd.debug_shell=ttyS0` と serial-getty
 RAM 不足は Server toram / 1,280MiB の VM で、必要 1,582,669,824 バイトに
 対し利用可能 1,028,845,568 バイトと理由を表示し、複写前に initramfs shell で
 停止した (`server-short-1280`)。媒体参照での起動続行はしていない。
+Ubuntu / 4,096 MiB と Lubuntu / 3,072 MiB も複写前の停止と serial の理由を
+確認した。必要量・利用可の実測値は [RAM 選択複写](ubuntu-ramsel.md) に記載。
+停止画面の日本語は文字化けし、VGA 単独での理由の可読性は満たさない。
 1,024MiB の別実行は initrd の展開中に write error で止まり、本処理に
 到達しなかった。この結果は選択複写の RAM 判定の証拠に含めていない。
 
@@ -193,13 +196,21 @@ Server / Lubuntu は一致しなかった。3 OS の値を個別保存後は実�
 UUID 照合の無効化や casper 本体の置換はしていない。
 
 公式 ISO の素の toram との量の比較は [RAM 選択複写](ubuntu-ramsel.md) を参照。
-公式比較は元の kernel / initrd と BIOS direct、統合 ISO は UEFI / GRUB である。
+この量の比較は、公式 ISO が元の kernel / initrd と BIOS direct、統合 ISO が UEFI / GRUB である。
 Ventoy 1.1.18 経由の検証は [Ventoy QEMU 検証](ventoy-qemu.md)を参照。
 GRUB2 モードで ISO 内の GRUB と追加 cpio を使い、3 OS の選択複写・
 USB 取り外し後の全層読出し・Python・APT が成功した。Server の残留 mapper
 のログ上のエラーと、通常起動モードの制約は同記録に明記している。
 Ventoy / BIOS は Server の toram と取り外しも確認した。
-実機・Secure Boot・Lubuntu / Ubuntu の BIOS と safe graphics の実起動は未検証。新規 ISO 組立経路の全体は今回再実行せず、既存 ISO の
+UEFI safe graphics の Server は 4,096 MiB で subiquity の言語選択画面まで到達し、
+`/proc/cmdline` の `nomodeset` を確認した (`build/evidence/e-quick/server-safe*`)。
+Lubuntu も 6,144 MiB で Try 選択後の LXQt と `nomodeset` を確認した。
+Ubuntu も 8,192 MiB で GNOME Live デスクトップと `nomodeset` を確認した。
+SeaBIOS / CD-ROM の Lubuntu・Ubuntu toram は各対象 3 層だけを複写し、tmpfs 使用量は
+各 3,749,957,632 / 4,722,278,400 バイト。全層読出し・Python・APT が成功した。
+詳細と証拠は [RAM 選択複写](ubuntu-ramsel.md) を参照。
+実機・Secure Boot は未検証。
+新規 ISO 組立経路の全体は今回再実行せず、既存 ISO の
 差分更新を実施した。最終 ISO の SHA-256 は
 `761b156da9d45fd9b666d6a6cb42dd4fd1e961063c8a7bfeab6937ba560a7d04`
 (`build/evidence/B2/iso.sha256`)。`make test` 全件合格、

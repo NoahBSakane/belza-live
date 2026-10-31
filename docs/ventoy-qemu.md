@@ -72,8 +72,11 @@ EFI エラーを conf_replace で解消したという結果ではない。
 | Server BIOS toram / GRUB2 | 確認済み | 2 層、tmpfs 1,515,585,536 バイト | subiquity / shell | 全層読出し・Python・APT 成功 |
 | Server 通常項目の対照 / GRUB2 | 確認済み | ISO / mapper を参照 | subiquity / shell | 新規コマンドが I/O エラー、対照成立 |
 
-実機・Secure Boot・safe graphics・OS インストール、BIOS の Lubuntu / Ubuntu は未検証。
-BIOS の追加試験は依頼のとおり Server だけを対象にした。
+実機・Secure Boot・Ventoy 経由の safe graphics・OS インストール、Ventoy / BIOS の
+Lubuntu / Ubuntu は未検証。ISO 単体の SeaBIOS CD-ROM 起動では Lubuntu / Ubuntu の
+選択複写と全層読出し・Python・APT を確認済みである。ISO 単体の UEFI safe graphics を
+含む追加結果は [RAM 選択複写](ubuntu-ramsel.md) を参照。
+本節の Ventoy / BIOS の試験対象は Server のみ。
 
 Lubuntu は標準の `snapd.seeded.service` を待ってから Try Lubuntu の画面に
 到達し、Live を選択した。サービス設定や ISO は変更していない。
