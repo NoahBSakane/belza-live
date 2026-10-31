@@ -20,3 +20,7 @@ SHA256SUMS
 /.agent-handoff/
 
 /.layers/
+
+# Python のバイトコード
+__pycache__/
+*.pyc
