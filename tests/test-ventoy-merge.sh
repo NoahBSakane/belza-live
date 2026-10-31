@@ -18,16 +18,38 @@ old = {"control": [{"VTOY_DEFAULT_MENU_MODE": "0"}],
        "menu_alias": [{"image": "/other.iso", "alias": "preserve"}]}
 (work / 'old.json').write_text(json.dumps(old))
 command = [sys.executable, '-I', str(root / 'ventoy/merge-ventoy-json.py')]
-subprocess.run(command + [str(work / 'old.json'), str(work / 'new.json'),
-                         '--profile', 'ubuntu-merge'], check=True)
+subprocess.run(command + [str(work / 'old.json'), str(work / 'new.json')], check=True)
 new = json.loads((work / 'new.json').read_text())
 for key in ('control', 'injection', 'conf_replace'):
     assert new[key] == old[key], key
 assert new['menu_alias'][0] == old['menu_alias'][0]
 assert new['menu_alias'][1]['image'] == '/ISO/live/ubuntu-merge-26.04.1-amd64.iso'
-subprocess.run(command + [str(work / 'new.json'), str(work / 'again.json'),
-                         '--profile', 'ubuntu-merge'], check=True)
+subprocess.run(command + [str(work / 'new.json'), str(work / 'again.json')], check=True)
 assert (work / 'new.json').read_bytes() == (work / 'again.json').read_bytes()
+template = json.loads((root / 'ventoy/merge/ventoy.json').read_text())
+assert new['menu_alias'][1:] == template['menu_alias']
+assert set(new) == set(old), 'unrequested plugin settings added'
+preview = work / 'preview.json'
+result = subprocess.run(command + [str(work / 'old.json'), str(preview), '--dry-run'],
+                        check=True, capture_output=True, text=True)
+assert result.stdout == (work / 'new.json').read_text()
+assert not preview.exists()
+# Stale/duplicate aliases for this ISO are replaced; unrelated entries stay intact.
+stale = dict(old, menu_alias=old['menu_alias'] + [
+    {'image': template['menu_alias'][0]['image'], 'alias': 'stale'},
+    {'image': template['menu_alias'][0]['image'], 'alias': 'duplicate'}])
+(work / 'stale.json').write_text(json.dumps(stale))
+subprocess.run(command + [str(work / 'stale.json'), str(work / 'replaced.json')], check=True)
+assert (work / 'replaced.json').read_bytes() == (work / 'new.json').read_bytes()
+subprocess.run(command + [str(work / 'stale.json'), str(work / 'stale.json'), '--in-place'],
+               check=True)
+assert (work / 'stale.json').read_bytes() == (work / 'new.json').read_bytes()
+# Previewing in place never alters its input.
+original = (work / 'old.json').read_bytes()
+subprocess.run(command + [str(work / 'old.json'), str(work / 'old.json'), '--dry-run'],
+               check=True, capture_output=True)
+assert (work / 'old.json').read_bytes() == original
+print('ok: default template / replacement / dry-run / in-place')
 spec = importlib.util.spec_from_file_location('verify', root / 'ventoy/ramsel/verify-qemu.py')
 v = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v)

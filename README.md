@@ -4,7 +4,7 @@ Debian 13(trixie)の、診断・救出ツール入りの Live と、Debian イ�
 
 状態: **試作中**。実機での起動は、まだ確認していない。
 
-- [Ventoy の USB 用の一式](ventoy/README.md)
+- [Ventoy の統合 Ubuntu ISO と Mac 用更新ツール](ventoy/README.md)
 
 ## 何が入るか
 

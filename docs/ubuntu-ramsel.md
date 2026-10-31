@@ -63,7 +63,7 @@ RAM の見積もりは複写前に行う。連鎖の合計に 64 MiB の余裕�
 - `bootkit.os=<os>` が OS を指定する。
 - 本処理は層の中身を見ない。層の再構成と同一性の保証は T1 の担当。
 - 実統合 ISO は `tools/ubuntu-merge/assemble.sh` が追加 cpio と GRUB を
-  組み込む。Ventoy 用 injection も同じ 2 ファイルから生成する。
+  組み込む。Ventoy でも ISO 内の追加 cpio を使う。
 - 層名の制約: casper の `layerfs-path` 導出は、末端層から点を1つずつ削って
   親を列挙し、点なし名の層まで要求する。そのため各連鎖の根は点なし名に
   する (例: `server` ← `server.ubuntu-server` ← ...)。
@@ -73,7 +73,7 @@ RAM の見積もりは複写前に行う。連鎖の合計に 64 MiB の余裕�
 ## ファイル
 
 `ventoy/ramsel/` に置く。いずれも POSIX sh または標準ライブラリだけの
-python3 で、Ventoy の injection に載せる前提の成果物である。
+python3 で、統合 ISO の追加 cpio と検証用アーカイブを生成する。
 
 - `30bootkit-ramsel`: premount の台本 (子プロセス)。媒体の探索・複写・検証と
   `/run/bootkit-ramsel/env`・`failed` の書き出しを行う。
@@ -94,53 +94,22 @@ python3 で、Ventoy の injection に載せる前提の成果物である。
 含まず、構文・`ORDER` の固定・台本の単体試験 (成功・無発動・RAM 不足・
 不正な値・欠落層) を行う。
 
-## Ventoy の injection への載せ方
+## Ventoy での起動
 
-アーカイブの作り方:
+Ventoy は 1.1.18 以上を使い、ISO 選択後に **Boot in grub2 mode** を選ぶ。
+統合 ISO 内の GRUB が OS ごとに `toram bootkit.os=<os> layerfs-path=<leaf>` と
+追加 cpio を指定する。injection・conf_replace の設定は不要。
+配置と設定は [統合 ISO 用設定](../ventoy/merge/README.md)を参照する。
 
-```sh
-sh ventoy/ramsel/make-injection.sh
-```
+`make-injection.sh` は同じ premount と `ORDER` を検証用の tar.gz に固める
+補助として残す。統合 ISO の通常の起動手順では使わない。
 
-`ventoy/ramsel/bootkit-ramsel-injection.tar.gz` ができる。中身は次の 2 点で、
-initramfs の `/` に展開される前提の配置である。
-
-```text
-scripts/casper-premount/30bootkit-ramsel
-scripts/casper-premount/ORDER
-```
-
-`ventoy.json` の `injection` への書き方の案 (統合 ISO の項目ごと):
-
-```json
-{
-  "injection": [
-    {
-      "image": "/ISO/bootkit-ubuntu-merge.iso",
-      "archive": "/ventoy/bootkit-ramsel-injection.tar.gz"
-    }
-  ]
-}
-```
-
-grub 項目 (T1 の `conf_replace` で置く `grub.cfg`) には OS ごとに
-`toram bootkit.os=<os> layerfs-path=<leaf>` を付ける。
-
-Ventoy 1.1.18 の `default-hook.sh` との干渉の調査結果
-(読んだ箇所と結論。実起動は後の作業で、QEMU 直起動で検証した範囲):
-
-- hook は `/init` に `export LIVEMEDIA=/dev/mapper/ventoy` を挿す。
-  本台本は媒体の探索で `LIVEMEDIA` を最優先で試すため、Ventoy 媒体に
-  対応できる。直起動 (`/dev/sr0` など) は装置走査で見つける。
-- hook が `/scripts/casper` の `LIVEMEDIA=` 代入を書き換えるのは
-  `live-media=` が引数にある場合だけ。本方式は `live-media=` を使わない
-  (premount 後に `LIVEMEDIA=/bootkit-ram` を親へ返す) ため、この書換えと
-  競合しない。
-- hook は `ORDER` に触らない。置換 `ORDER` との競合は無い。
-- `find_cow_device` の差し込みは永続化を使う場合だけ関係する。
-  本方式は `NOPERSISTENT=Yes` で動くため関係しない。
-- premount 時点で `/dev/mapper/ventoy` が見えるかは、Ventoy の実起動で
-  確かめるまでは未確認。見えない間の再試行 (約 30 秒) は入れてある。
+Ventoy 1.1.18 の `default-hook.sh` は `/init` に
+`export LIVEMEDIA=/dev/mapper/ventoy` を挿す。本台本は `LIVEMEDIA` を
+優先して探索し、premount 後は `LIVEMEDIA=/bootkit-ram` を親へ返す。
+`live-media=` は使わず、Ventoy hook は `ORDER` に触らないため、
+追加 cpio の読み戻しと競合しない。QEMU では premount 時点で
+`/dev/mapper/ventoy` を検出している。
 
 ## 検証結果
 
@@ -182,12 +151,11 @@ RAM 不足は Server toram / 1,280MiB の VM で確認。必要 1,582,669,824 �
 
 ## 既知の制約・未確認の点
 
-- 実機・Ventoy の実起動・Secure Boot は未検証。
+- 実機・Secure Boot は未検証。Ventoy の QEMU 起動は下記参照。
 - 実統合 ISO は全 9 項目で `layerfs-path` と `bootkit.os` を明示する。
   層の選択は `layerfs-path`、RAM 選択複写の選択は `bootkit.os` が担う。
 - GUI の確認は起動画面と Lubuntu の Try 選択まで。通常のアプリの
   GUI 操作や、日本語表示・入力・インストールは未検証。
-- premount 時点の `/dev/mapper/ventoy` の可視性は未確認 (再試行あり)。
 - 再層化 (B2) 後の層名・連鎖が変われば、`.list` と `layerfs-path` を
   合わせ直す (本処理の変更は要らない)。
 

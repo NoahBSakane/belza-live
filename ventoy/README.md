@@ -1,52 +1,47 @@
 # Ventoy の USB 用の一式
 
-## 共通層の統合 ISO (B2)
+Ubuntu・Lubuntu・Ubuntu Server 26.04.1 amd64 は、共通層を共有する
+統合 ISO (B2) で使う。Ventoy は **1.1.18 以上**とし、ISO 選択後に
+**Boot in grub2 mode** を選ぶ。
 
-Ubuntu・Lubuntu・Server が共通層を共有する ISO の設定は
-[merge/](merge/README.md)、Ventoy 1.1.18 / QEMU の実測は
-[統合 ISO の検証記録](../docs/ventoy-qemu.md)を参照する。
-Ventoy では ISO を選択後に **Boot in grub2 mode** を使う。
-統合 ISO 内の GRUB と追加 cpio により OS を選択し、RAM 選択複写を行う。
-以下の追加パックとは別の構成である。
+## 統合 ISO の配置と起動
 
-公式の `ubuntu-26.04.1-desktop-amd64.iso` だけを使い、Live 起動では文字画面・LXQt・GNOME、自動インストールでは Ubuntu with Server・Lubuntu-modoki・Ubuntu Server-modoki を選ぶための設定。Lubuntu-modoki・Ubuntu Server-modoki の追加機能は ISO に含まれず、Live 起動では追加パックで永続化領域へ導入する(`modoki` は「もどき(それに近い、同じ公式配布物ではない)」の意味)。**実機では未検証**であり、既存 USB へ自動で書き込む仕組みは含めない。
-
-Ventoy は **1.1.18 以上**を使う。依頼元で確認済みの情報では、1.1.11 に Ubuntu のインストールが失敗する既知の問題があり、1.1.12 で修正されている。この一式では 1.1.18 を前提にする。
-
-## USB への置き方
-
-USB の最初のパーティションに、最終コピーで次の配置にする。先に手元の通常ディスク上で生成・検査し、USB 上で persistence ファイルを作らない。既存の `ventoy.json` は保存しておく。
+USB の第 1 パーティションへ、次の配置で統合 ISO を置く。
 
 ```text
-/ISO/live/ubuntu-26.04.1-desktop-amd64.iso
-/ISO/persistence/ubuntu-26.04.1-amd64.dat
-/ventoy/ventoy.json
-/ventoy/ubuntu/grub.cfg
-/ventoy/ubuntu/ubuntu-modoki-setup.sh
-/ventoy/ubuntu/bootkit-session.sh
-/ventoy/ubuntu/bootkit-session.service
-/ventoy/ubuntu/bootkit-motd.sh
-/ventoy/script/ubuntu-with-server.yaml
-/ventoy/script/lubuntu-modoki.yaml
-/ventoy/script/server-modoki.yaml
+/ISO/live/ubuntu-merge-26.04.1-amd64.iso
 ```
 
-persistence は Live の変更を保存する ext4 ファイルで、ラベルは `casper-rw`、既定サイズは 4096 MiB (4 GiB)。新規の通常ファイルだけを作り、既存ファイル・シンボリックリンク・デバイスは拒否する。Linux では `truncate` と `mkfs.ext4`、Apple Silicon Mac では Homebrew の `e2fsprogs` に含まれる `/opt/homebrew/opt/e2fsprogs/sbin/mke2fs` が必要。道具がなければ案内して終了コード 77 を返す。
+ISO 内の GRUB メニューで、3 OS それぞれの通常・safe graphics・copy to RAM
+の計 9 項目を選ぶ。copy to RAM は選択した OS の層だけを RAM へ複写する。
+起動に必要な GRUB と追加 cpio は ISO に含まれ、Ventoy の injection や
+conf_replace、追加パック、永続化用の `.dat` は不要。
+
+表示名の雛形は [merge/ventoy.json](merge/ventoy.json)。既存の設定へは、
+手元に保存した JSON を入力にして次のように統合する。
 
 ```sh
-sh ventoy/make-persistence.sh ./ubuntu-26.04.1-amd64.dat
+python3 -I ventoy/merge-ventoy-json.py existing.json merged.json --dry-run
+python3 -I ventoy/merge-ventoy-json.py existing.json merged.json
 ```
 
-第 2 引数でサイズを MiB 単位で変更できる。`/Volumes/` 配下への作成は、シンボリックリンク経由も拒否する。`--allow-external` を先頭に付けた場合だけ許すが、通常の運用は手元で作成して最終コピーとする。
+統合 ISO の表示名だけを置き換え、他の ISO やプラグイン設定は保持する。
+同じ入力・出力への書き込みには `--in-place` が必要。
+既存の injection・conf_replace に統合 ISO 向けの試験設定があれば、
+その内容を別途照合する。設定の詳細は [統合 ISO 用設定](merge/README.md)、
+層構成・作成方法は [統合 ISO の仕様](../docs/ubuntu-merge.md)を参照する。
 
-既存の設定を読み、別ファイルへ統合する例:
+## 起動の確認範囲
 
-```sh
-python3 -I ventoy/merge-ventoy-json.py /Volumes/VENTOY/ventoy/ventoy.json ./ventoy.generated.json --dry-run
-python3 -I ventoy/merge-ventoy-json.py /Volumes/VENTOY/ventoy/ventoy.json ./ventoy.generated.json
-```
+Ventoy 1.1.18 の QEMU では、GRUB2 モードで UEFI の 3 OS と BIOS の Server の
+copy to RAM 起動が完了し、仮想 USB の取り外し後も全層読出し・Python・APT が
+成功した。通常モードは UEFI で `Failed to open \EFI\BOOT\ - No mapping`
+となり、180 秒以内に ISO メニューへ進まなかったため、GRUB2 モードを使う。
 
-生成した JSON とファイル群を最終コピーする。`control` など既存の設定と、別 ISO の項目は保つ。同じ Ubuntu ISO の `persistence`・`conf_replace`・`auto_install`・`menu_alias` の項目は置き換え、重複を除く。再実行しても結果は同じ。同一ファイル・同一実体への直接書き込みは `--in-place` がなければ拒否する。`--dry-run` は標準出力に表示するだけ。
+実機・Secure Boot・safe graphics・OS インストール、BIOS の Lubuntu / Ubuntu は
+未検証。Server は取り外し後に残留 mapper の I/O エラーを記録したが、RAM の
+層読出しと Python・APT は成功した。条件と証拠は
+[Ventoy QEMU 検証](../docs/ventoy-qemu.md)を参照する。
 
 ## Ventoy の更新(Mac、MBR のディスク)
 
@@ -62,108 +57,15 @@ sudo python3 -I ventoy/update-ventoy-mbr.py --ventoy-dir ./ventoy-1.1.18 --backu
 - 書き込み前に、先頭 1MiB と第 2 パーティションを `--backup-dir` へ退避し、書き込み後に全領域を読み戻して照合する。書き込みは 512 バイト境界に揃えてある(`/dev/rdisk` は端数の書き込みができない)。
 - Mac のデバイスへの書き込みは root が要る。先に `diskutil unmountDisk diskN` でマウントを外す。
 - 検証(2026-10-26): Alpine Linux 上の本物の `Ventoy2Disk.sh -I` で作った 2GiB の仮ディスクに、起動コード・コア領域を壊した状態を作り、本物の `-u` とこのスクリプトを同じ入力で実行して比較した。active フラグの入れ替えがある場合とない場合の両方で、先頭 1MiB と第 2 パーティションの先頭 64,883 セクタが完全に一致した。第 2 パーティションの末尾は、Alpine の busybox `dd` が書き漏らして本物の方が欠けた(約 647 セクタ)。Alpine などの busybox 環境では本物の更新スクリプトを使わない。
-- 実機での実行(2026-10-26): MBR・第 2 パーティション 32MiB・セキュアブート版の 1TB の USB(第 1 パーティションにデータ約 870GB)で、`update-ventoy-mac.sh` と同じ手順(検査 → 退避 → 書き込み → 読み戻し照合)を実行し、読み戻し照合が成功した。更新後の USB の第 1 パーティションのファイルは無傷だった。更新後の Ventoy を QEMU(UEFI)の仮ディスクで起動し、1.1.18 のメニュー・自動インストールのテンプレート選択・persistence の選択が表示されることを確認した。
+- 実機での実行(2026-10-26): MBR・第 2 パーティション 32MiB・セキュアブート版の 1TB の USB(第 1 パーティションにデータ約 870GB)で、`update-ventoy-mac.sh` と同じ手順(検査 → 退避 → 書き込み → 読み戻し照合)を実行し、読み戻し照合が成功した。更新後の USB の第 1 パーティションのファイルは無傷だった。更新後の Ventoy を QEMU(UEFI)の仮ディスクで起動し、1.1.18 のメニュー表示を確認した。
 - Mac から呼ぶ入口: `bash ventoy/update-ventoy-mac.sh <ボリューム名> <展開した ventoy-X.Y.Z のフォルダ>`(`sudo` のパスワードが要る)。
 - Apple 仮想化(UTM の Apple バックエンド)の VM に USB の NVMe ケース(SuperSpeed Plus)を渡すと、`can't set config #1, error -32` で認識できなかった。VM 経由の更新はできない。
 
-## Live 起動
-
-Ventoy の ISO 別名は `Ubuntu-modoki 26.04.1 bundle`。
-
-Ventoy で ISO を選ぶと、自動インストールのテンプレート選択と persistence 選択を経て、ISO 内の GRUB 起動メニューに進む。persistence の選択画面は ISO 内のメニューより前に出る。Ventoy 側で選択が省略される場合もあるため、保存領域を使う設定で起動したことを確認する。テンプレートの既定は「なし」(`autosel: 0`、待ち時間 15 秒)で、通常の Live 起動を選ぶ。
-
-| ISO 内の項目 | 動作 |
-| --- | --- |
-| Lubuntu-modoki (LXQt) | 既定。30 秒で選択。追加パック導入済みの LXQt セッションを選択 |
-| Lubuntu-modoki (safe graphics) | LXQt を選択し、`nomodeset` を使う |
-| Lubuntu-modoki (copy to RAM) | LXQt を選択し、`toram` を使う。ISO と作業領域に足りる RAM が必要 |
-| Ubuntu Server-modoki (text mode) | `multi-user.target` で文字画面を起動。tty1 は起動ログのまま止まって見えるが、ログインプロンプトは tty2(Alt+F2)に出る(`ubuntu` ユーザー、パスワードなし) |
-| Ubuntu Server-modoki (copy to RAM) | 文字画面を選択し、`toram` を使う。ISO と作業領域に足りる RAM が必要 |
-| Ubuntu with Server (GNOME) | 元の Try or Install Ubuntu と同じカーネル引数。追加後も GNOME を選択 |
-| Ubuntu with Server (safe graphics) | `nomodeset` を使う |
-| Ubuntu with Server (copy to RAM) | `toram` を使う。ISO と作業領域に足りる RAM が必要 |
-| Boot from next volume | UEFI だけで表示。次のボリュームから起動 |
-| UEFI Firmware Settings | UEFI だけで表示。ファームウェア設定を開く |
-
-`conf_replace` は通常の起動モードで `/boot/grub/grub.cfg` を差し替える。別の起動モードや `loopback.cfg` は対象外。`persistent` オプションは Ventoy に任せ、GRUB には手動で加えない。
-
-## Live の追加パック(Lubuntu-modoki / Ubuntu Server-modoki)の初回導入
-
-persistence を有効にした Ubuntu Live から、USB の `ventoy/ubuntu/` を使い、**Live ユーザーの端末**で実行する。初回は文字画面でも Ubuntu の GUI でもよい。
-
-USB の第 1 パーティション(`/dev/vda1`・`/dev/sdX1` など)は、Ventoy が ISO のために掴んでいて、直接はマウントできない(`Can't open blockdev`)。Ventoy が用意する `/dev/mapper/VentoyPart` を読み取りでマウントする。
-
-```sh
-sudo mount -o ro /dev/mapper/VentoyPart /mnt
-sudo sh /mnt/ventoy/ubuntu/ubuntu-modoki-setup.sh
-```
-
-`casper-rw` ラベルのデバイスがあり、ルートの容量がそのデバイスに近い(RAM 上でない)こと、ネットワーク経路、DNS を確認してから APT 索引を更新し、`lubuntu-desktop ubuntu-server openssh-server` を導入する。容量の概算は LXQt 約 1.9GB + Server 約 240MB。APT キャッシュ・更新差分・ユーザーデータは別途必要で、4 GiB の保存領域には余裕が小さい。実際の空き容量とダウンロード量は APT の表示でも確認する。
-
-導入中のサービス自動起動を `policy-rc.d` で抑え、既存の policy は終了時に戻す。SSH サービスとソケットは停止・無効化する。完了印は全工程の成功後だけに残し、2 回目は何もしない。途中失敗時はエラーで止まり、再実行で導入を続ける。既存の SSH を意図的に有効化した場合も、完了印のある再実行は変更しない。
-
-完了マーカー `/var/lib/bootkit/ubuntu-pack-v1` は内部名で、導入済みの永続化領域との互換のため変更しない。
-カーネル引数の `bootkit.session=lubuntu` / `bootkit.session=server` も内部名で、同じ互換性を保つため modoki の名前に合わせて変えない。
-
-自動起動の表示マネージャーは GDM にそろえ、`bootkit-session.service` を表示マネージャーより前に実行する。`bootkit.session=lubuntu` の場合は LXQt、それ以外は Ubuntu のセッションを選ぶ。セッションのファイル名は `/usr/share/xsessions/`・`/usr/share/wayland-sessions/` に実在する `.desktop` から検出し、見つからなければエラーにする。GDM 用の AccountsService のセッション設定を切り替え、手動起動用の SDDM は LXQt の自動ログインに設定する。Live ユーザーの自動ログインを前提とする設定であり、インストール済み OS にこのセットアップを実行しない。
-
-文字画面でログインすると、導入後は次の案内を表示する。初回の導入前には、この案内を出すファイル自体がまだない。
-
-```text
-GUI を使うには: sudo systemctl start gdm3 (Ubuntu with Server) または sudo systemctl start sddm (Lubuntu-modoki)。
-次回から GUI で起動するには、起動メニューで Lubuntu-modoki か Ubuntu with Server を選ぶ。
-```
-
-手動で GUI を起動する前にも、セッションは現在の `bootkit.session` に応じて設定される。既に GUI が動作中の場合、別の表示マネージャーを同時に起動しない。導入直後の切り替えは再起動で行う。
-
-## 自動インストール
-
-Ventoy のメニューはファイルパスを表示するので、目的の名前の YAML を選ぶ。すべて `ubuntu-desktop-minimal` を元にし、**storage と identity は人が選ぶ**。消去対象・ユーザー・パスワードを固定しない。storage 画面で Ventoy USB をインストール先に選ばない。`$$VT_LINUX_DISK_NONVTOY_CLOSEST_...$$` はコメントの接頭辞説明だけで、変数を既定では使わない。
-
-共通設定は英語ロケール・日本語キーボード・東京時間。追加パッケージの取得にはネットワークが必要で、オフラインインストールを保証しない。`ssh.install-server` は false、追加した OpenSSH も後処理でサービスとソケットを無効化する。
-
-| テンプレート | 追加・後処理 |
-| --- | --- |
-| ubuntu-with-server.yaml | `ubuntu-server` と `openssh-server` を追加し、GNOME を残す |
-| lubuntu-modoki.yaml | さらに `lubuntu-desktop` を追加。SDDM を設定。DM の設定失敗は警告して続行する |
-| server-modoki.yaml | `ubuntu-server openssh-server linux-generic` を追加。指定した GUI パッケージを 1 個ずつ存在確認して purge。デスクトップ snap を削除し、autoremove。文字画面と networkd を既定にする |
-
-Ubuntu Server-modoki では既存 netplan の `renderer: NetworkManager` を `networkd` へ変更し、`00-installer-config.yaml` にも指定する。NetworkManager を無効にし、networkd と systemd-resolved を有効にする。Wi-Fi など既存設定の networkd への適合性、公式 Server のパッケージ・snap・ネットワーク構成との一致は未確認。GUI を外した Desktop を公式 Server ISO と同等だとは扱わない。
-
 ## 検査
 
-ネットワークや実デバイスを使わない検査:
-
 ```sh
-sh tests/test-ventoy-bundle.sh
-sh tests/test-ventoy-bundle.sh --mutation-check
-python3 -I -m py_compile ventoy/merge-ventoy-json.py
-python3 ~/.agents/hooks/md-lint.py ventoy/README.md README.md
+make test
 ```
 
-シェルの構文、ShellCheck (導入済みの場合)、GRUB の項目、YAML の宣言・対話指定、JSON の保持・重複除去・冪等性、外付けへの生成拒否、危険なコマンドを検査する。PyYAML があれば YAML 全体も解析し、なければ宣言と対話指定を静的に検査する。壊した版は別コピーで検査し、元ファイルには触れない。実機の動作の証明ではない。
-
-パッケージ索引検査は別実行。ネットワークを明示的に許す場合:
-
-```sh
-sh tests/test-ventoy-bundle.sh --check-packages --download
-```
-
-`resolute/main` と `resolute/universe` の公式 `binary-amd64/Packages.xz` を読み、追加パッケージと purge 対象名の実在を確認する。ネットワークがない・取得できない場合は終了コード 77。`--download` を省くと通信せず 77 を返す。ローカルの `main.xz` と `universe.xz` を使う場合は `--indexes /path/to/indexes` を指定する。パッケージ名の実在検査であり、依存解決や公式 Server manifest との同等性の検査ではない。
-
-## 検証済みの項目
-
-- 2026-10-26: 公式 `ubuntu-26.04.1-desktop-amd64.iso`(SHA-256 は公式の一覧と一致)の `/boot/grub/grub.cfg` を、この一式の `ventoy/ubuntu/grub.cfg` に差し替えた ISO を、QEMU(UEFI、4GiB、TCG)で起動した。Ventoy は介さない。
-  - 「Ubuntu Server-modoki (text mode)」(試験時の既定): カーネルのコマンドラインに `systemd.unit=multi-user.target bootkit.session=server` が渡り、GDM は inactive、文字画面のログインプロンプト(tty2)まで到達した。カーネルは 7.0.0-30-generic。
-  - 「Ubuntu with Server (GNOME)」: plymouth のあと GDM のログイン画面(Live session user)まで到達した(QEMU の TCG で約 15 分)。
-  - 追加パック(`bootkit-motd` の案内、Lubuntu-modoki、persistence)は、この試験には含まれない。
-- 2026-10-26: Ubuntu 26.04(resolute)の main / universe の索引で、自動インストール用 YAML と purge 対象の 14 パッケージ名の実在を確認した(`ventoy/check-package-index.py --download`)。
-
-## 未検証の項目
-
-- Ventoy 1.1.18 での Ubuntu 26.04.1 の BIOS / UEFI 起動、persistence の保存・復元、`conf_replace` の実効。原文 GRUB・loopback の参照ファイルはこの作業ツリーにはなく、元ファイルの見た目・機能の完全一致も未確認。
-- Desktop ISO に対する Ventoy 自動インストールと、3 テンプレートの適用・storage/identity 画面の表示。Desktop ISO への適用は Ventoy 公式資料に未記載との依頼元情報。
-- `bootkit.session` の実効、systemd の順序、SDDM / GDM のセッション選択・Live 自動ログイン。Ubuntu 26.04 の Contents 索引・パッケージ内一覧は未入手で、設定パス・キーの版固有の有効性は未確認。スクリプトにも明記している。
-- GUI の apt 追加が 4 GiB の persistence に収まること、追加後の GNOME / LXQt の動作、`toram` と persistence の併用・USB の取り外し。
-- Ubuntu 26.04 の追加・削除対象パッケージ名の公式索引による実在確認、SDDM の設定、Server 用後処理の実行、netplan と networkd の通信。
-- Ubuntu Server-modoki と公式 Ubuntu Server の manifest・snap・カーネル・サービス・設定の差。purge 対象の公式 Server manifest 不在も未確認で、完全な Server 化は保証しない。
+通信不要の全テストには、統合 ISO 用 JSON の保持・置換・冪等性と、
+空白を含むパスの試験を含む。実媒体の更新や ISO の実起動は実行しない。
