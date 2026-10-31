@@ -41,7 +41,7 @@ fail() {
     # 親 (ORDER) が panic するための理由を残し、子は黙って抜ける。
     mkdir -p "$RUN_DIR"
     printf '%s\n' "$1" >"$RUN_DIR/failed"
-    log "失敗: $1"
+    log "fail: $1"
     exit 1
 }
 
@@ -166,13 +166,13 @@ main() {
         exit 0
     fi
     if ! valid_os "$os"; then
-        fail "bootkit.os の値が不正: $os"
+        fail "invalid bootkit.os: $os"
     fi
     # set -e による想定外の失敗も、通常の媒体起動への黙った復帰にしない。
     status=0
     trap 'status=$?; if [ "$status" -ne 0 ] && [ ! -f "$RUN_DIR/failed" ]; then
         mkdir -p "$RUN_DIR"
-        printf "起動処理が異常終了 (status=%s)\n" "$status" >"$RUN_DIR/failed"
+        printf "copy-to-RAM aborted (status=%s); will not continue from media\n" "$status" >"$RUN_DIR/failed"
     fi' 0
     if command -v udevadm >/dev/null 2>&1; then
         udevadm settle --timeout=10 2>/dev/null || true
@@ -191,9 +191,9 @@ main() {
         waited=$((waited + 1))
     done
     if [ -z "$media" ]; then
-        fail "媒体が見えない (bootkit-chains/$os.list を持つ装置なし。LIVEMEDIA=${LIVEMEDIA:-未設定})"
+        fail "media not found (no device with bootkit-chains/$os.list; LIVEMEDIA=${LIVEMEDIA:-unset})"
     fi
-    log "媒体: $media (toram 選択複写、os=$os)"
+    log "media: $media (toram select copy, os=$os)"
 
     list="$scan_mnt/casper/bootkit-chains/$os.list"
     tmp_list="$RUN_DIR/chain.list"
@@ -207,11 +207,11 @@ main() {
         esac
         if ! valid_layer_name "$line"; then
             umount "$scan_mnt" 2>/dev/null || true
-            fail "層名が不正: $line"
+            fail "invalid layer name: $line"
         fi
         if [ ! -f "$scan_mnt/casper/$line" ]; then
             umount "$scan_mnt" 2>/dev/null || true
-            fail "層が媒体に無い: $line"
+            fail "layer missing from media: $line"
         fi
         printf '%s\n' "$line" >>"$tmp_list"
         size="$(file_bytes "$scan_mnt/casper/$line")"
@@ -219,26 +219,26 @@ main() {
     done <"$list"
     if [ ! -s "$tmp_list" ]; then
         umount "$scan_mnt" 2>/dev/null || true
-        fail "連鎖が空: $list"
+        fail "empty chain: $list"
     fi
     need_kb=$((total / 1024 + SLACK_KB))
     avail_kb="$(mem_available_kb 2>/dev/null || printf '0\n')"
-    log "連鎖の合計: $total バイト、必要: ${need_kb} KiB、利用可: ${avail_kb} KiB"
+    log "chain total: $total bytes, need: ${need_kb} KiB, available: ${avail_kb} KiB"
     case "$avail_kb" in
     '' | *[!0-9]*)
         umount "$scan_mnt" 2>/dev/null || true
-        fail "メモリ量を読めない"
+        fail "cannot read memory size"
         ;;
     esac
     if [ "$avail_kb" -lt "$need_kb" ]; then
         umount "$scan_mnt" 2>/dev/null || true
-        fail "RAM が足りない (必要 ${need_kb} KiB、利用可 ${avail_kb} KiB)。媒体参照のまま続けない"
+        fail "not enough RAM (need ${need_kb} KiB, available ${avail_kb} KiB); will not continue from media"
     fi
 
     mkdir -p "$TARGET"
     if ! mount -t tmpfs -o "size=${need_kb}k" tmpfs "$TARGET"; then
         umount "$scan_mnt" 2>/dev/null || true
-        fail "tmpfs を作れない (size=${need_kb}k)"
+        fail "cannot create tmpfs (size=${need_kb}k)"
     fi
     mkdir -p "$TARGET/casper"
     while IFS= read -r layer; do
@@ -246,7 +246,7 @@ main() {
         if ! cp -a "$scan_mnt/casper/$layer" "$TARGET/casper/$layer"; then
             umount "$TARGET" 2>/dev/null || true
             umount "$scan_mnt" 2>/dev/null || true
-            fail "複写に失敗: $layer"
+            fail "copy failed: $layer"
         fi
         base="${layer%.squashfs}"
         for ext in manifest manifest.full size; do
@@ -259,7 +259,7 @@ main() {
         if [ "$src_size" != "$dst_size" ]; then
             umount "$TARGET" 2>/dev/null || true
             umount "$scan_mnt" 2>/dev/null || true
-            fail "写し誤り (大きさ不一致): $layer"
+            fail "copy mismatch (size): $layer"
         fi
     done <"$tmp_list"
     if [ -d "$scan_mnt/.disk" ]; then
@@ -269,7 +269,7 @@ main() {
         cp -a "$scan_mnt/casper/install-sources.yaml" "$TARGET/casper/install-sources.yaml" 2>/dev/null || true
     fi
 
-    umount "$scan_mnt" 2>/dev/null || fail "媒体を外せない ($media)。媒体参照のまま続けない"
+    umount "$scan_mnt" 2>/dev/null || fail "cannot unmount media ($media); will not continue from media"
     rmdir "$scan_mnt" 2>/dev/null || true
 
     {
@@ -282,7 +282,7 @@ main() {
         printf 'export LIVEMEDIA="%s"\n' "$TARGET"
         printf 'export NOPERSISTENT="Yes"\n'
     } >>"$CONFIG"
-    log "複写が完了: $media を外した。LIVEMEDIA=$TARGET で続ける"
+    log "copy complete: unmounted $media; continuing with LIVEMEDIA=$TARGET"
     exit 0
 }
 

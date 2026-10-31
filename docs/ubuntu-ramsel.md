@@ -158,8 +158,9 @@ RAM 不足は Server toram / 1,280MiB の VM で確認。必要 1,582,669,824 �
 | Lubuntu | 3,072 | 3,727,580 | 2,585,520 | `lubuntu-short` |
 
 証拠は `build/evidence/e-quick/` の serial 原本・整形ログ・`-panic.png`。
-停止画面では日本語が文字化けし、理由の全文を読めない。停止動作と serial の
-理由は確認済みだが、VGA 画面だけで理由を読めるという結果ではない。
+当時の停止画面は日本語で、VGA コンソールでは文字化けした。画面メッセージは
+ASCII (英語) に変更した。VGA での表示は未確認。
+例: `not enough RAM (need <KiB> KiB, available <KiB> KiB); will not continue from media`。
 
 ## safe graphics の追加検証
 

@@ -13,7 +13,7 @@
 /scripts/casper-premount/30bootkit-ramsel "$@"
 bootkit_ramsel_status=$?
 if [ "$bootkit_ramsel_status" -ne 0 ] && [ ! -f /run/bootkit-ramsel/failed ]; then
-    panic "bootkit-ramsel: 選択複写の起動処理が異常終了 (status=$bootkit_ramsel_status)。媒体参照のまま続けない"
+    panic "bootkit-ramsel: copy-to-RAM aborted (status=$bootkit_ramsel_status); will not continue from media"
 fi
 [ -e /conf/param.conf ] && . /conf/param.conf
 if [ -f /run/bootkit-ramsel/env ]; then . /run/bootkit-ramsel/env; fi

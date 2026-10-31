@@ -38,6 +38,19 @@ for line in \
 done
 ok 'ORDER'
 
+# 画面に出る行 (コメント以外) は VGA が扱える ASCII に限る。
+python3 -I - "$RAMSEL/30bootkit-ramsel" "$RAMSEL/ORDER" <<'PY'
+from pathlib import Path
+import sys
+for path in sys.argv[1:]:
+    shown = b'\n'.join(
+        line for line in Path(path).read_bytes().splitlines()
+        if not line.lstrip().startswith(b'#'))
+    if not shown.isascii():
+        raise SystemExit('non-ASCII on-screen text: ' + path)
+print('ok: on-screen ASCII')
+PY
+
 # 置換 ORDER に含まれる標準 4 行は rebuild-initrd.py の固定値と一致する (ずれ検出)。
 python3 -I - "$RAMSEL/ORDER" "$RAMSEL/rebuild-initrd.py" <<'PY'
 import importlib.util
@@ -138,7 +151,7 @@ ok 'bootkit.os 無しは何もしない'
 # RAM 不足: 黙って続かず failed。
 env_for 'BOOT_IMAGE=x toram bootkit.os=test --- quiet' 'MemAvailable:      10000 kB'
 [ "$(run_script poor)" = 1 ] || fail 'RAM 不足で止まらない'
-grep -Fq 'RAM が足りない' "$WORK/run-poor/failed" || fail '理由が違う'
+grep -Fq 'not enough RAM' "$WORK/run-poor/failed" || fail '理由が違う'
 [ ! -e "$WORK/run-poor/env" ] || fail 'RAM 不足で env を書いた'
 ok 'RAM 不足は失敗する'
 
@@ -151,7 +164,7 @@ ok '不正な os 値は失敗する'
 printf 'nope.squashfs\n' >"$MEDIA/casper/bootkit-chains/broken.list"
 env_for 'BOOT_IMAGE=x toram bootkit.os=broken --- quiet' 'MemAvailable:    8000000 kB'
 [ "$(run_script broken)" = 1 ] || fail '欠落層で止まらない'
-grep -Fq '層が媒体に無い' "$WORK/run-broken/failed" || fail '理由が違う'
+grep -Fq 'layer missing from media' "$WORK/run-broken/failed" || fail '理由が違う'
 ok '欠落層は失敗する'
 
 # 想定外の I/O 失敗でも failed が残り、親が panic できる。
@@ -166,7 +179,7 @@ STUB
 chmod +x "$STUBS/stat" "$STUBS/wc"
 env_for 'toram bootkit.os=test' 'MemAvailable:    8000000 kB'
 [ "$(run_script io-error)" = 1 ] || fail 'I/O 異常終了で成功した'
-grep -Fq '起動処理が異常終了' "$WORK/run-io-error/failed" || fail '異常終了の理由が無い'
+grep -Fq 'copy-to-RAM aborted' "$WORK/run-io-error/failed" || fail '異常終了の理由が無い'
 ok '想定外の I/O 異常終了も failed'
 
 printf 'ALL OK\n'

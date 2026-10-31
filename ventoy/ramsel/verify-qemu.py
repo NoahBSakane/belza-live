@@ -480,9 +480,9 @@ def main():
             if args.expect_panic:
                 remaining = max(60, deadline - time.monotonic() - 60)
                 try:
-                    marker = serial.expect('RAM が足りない', min(1200, remaining), 'RAM 不足の理由')
+                    marker = serial.expect('not enough RAM', min(1200, remaining), 'RAM 不足の理由')
                     serial.expect('(initramfs)', 120, '停止 shell')
-                    if '複写が完了'.encode() in serial.buffer:
+                    if b'copy complete' in serial.buffer:
                         raise RuntimeError('RAM 不足にもかかわらず複写が完了した')
 
                 except TimeoutError as error:

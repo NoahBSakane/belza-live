@@ -24,6 +24,7 @@ for name in ('ORDER', '30bootkit-ramsel'):
     assert files['scripts/casper-premount/' + name] == (root / 'ventoy/ramsel' / name).read_bytes()
 assert len(files) == 4
 cfg = module('grub', 'tools/ubuntu-merge/grub.py').config()
+assert cfg.isascii()
 assert cfg.count('    linux ') == 9
 for line in cfg.splitlines():
     if line.lstrip().startswith('linux '):
