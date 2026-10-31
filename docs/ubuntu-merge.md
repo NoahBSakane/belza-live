@@ -237,7 +237,8 @@ leaf の名前からドットを削って親を列挙する。指定 leaf が
 
 `install-sources.yaml` は `locale_support: langpack`、`preinstalled_langs`
 (de/en/es/fr/it/pt/ru/zh と空値)、通常・enhanced-secureboot の variation を
-持つ。日本語の派生層と ja の事前インストール指定は公式 ISO にも無い。
+持つ (実物は `casper/bootkit-meta/<os>/casper-meta/` に保存)。
+日本語の派生層と ja の事前インストール指定は公式 ISO にも無い。
 主要層には `usr/share/locale/ja/` の 27 レコードと Noto CJK のフォント 4 個が
 あり、これらは統合層の同一性検証の対象で保持する。casper が既定起動で載せる
 日本語関連ファイルは、派生層の省略によって減らない (層ビュー比較済み)。
@@ -250,3 +251,34 @@ OS インストールや enhanced-secureboot の選択は検証対象外であ�
 各カタログ・派生パスの変換と別の同一性検証が必要で、小さな 1 層追加の
 範囲を超える。根拠は保存済み casper 26.04.2 ソース、公式カタログ、
 `build/evidence/B2/language-{layers,en-tree,none-tree}.txt`。
+
+## OS インストールの検証 (オフライン)
+
+2026-10-31、統合 ISO (SHA-256
+`761b156da9d45fd9b666d6a6cb42dd4fd1e961063c8a7bfeab6937ba560a7d04`)
+からの Server の offline 自動インストールを QEMU x86_64 / TCG / OVMF で
+試行した (`-net none`)。証拠は `build/evidence/offline-install/server/`。
+Lubuntu と Ubuntu のインストールは未実施である。
+
+- seed は `CIDATA` ラベルの小さな ISO (`user-data` / `meta-data`)。
+  GRUB の Server 通常項目に
+  `bootkit_extra='autoinstall ds=nocloud ...'` を渡した。
+  カーネル行・GRUB の 9 項目は画像と serial に記録した。
+- seed を認識し、全 controller の `apply_autoinstall_config` が完了した。
+  しかし `subiquity/Install/install/configure_apt` で overlay の mount
+  (`lowerdir=/media/filesystem`) が終了状態 32 で失敗し、`install_fail`
+  の crash を書いて停止した。標的ディスク (qcow2 20GB スパース) への
+  書込みはなく、単独起動・`dpkg --audit`・`apt-get check` には至らない。
+- 原因: subiquity (同梱 snap 7403) は起動時に
+  `/cdrom/casper/install-sources.yaml` を探し、無ければ組込みの legacy
+  項目 (`path=/media/filesystem`、`type=cp`) へ落ちる。統合 ISO の
+  `/casper/` に同ファイルは無い (公式 Server 用は `bootkit-meta` に
+  保存のみ)。live 内に `/media/filesystem` は無く、casper は層を
+  `/rofs` に載せる。根拠は ISO からの層・snap の読み取りと、
+  先行の live 起動の mount 記録である。
+- 方向: `fsimage-layered` の層の導出はドットで短くする規則で、
+  `common.server.squashfs` なら `common.squashfs` との連鎖になる
+  (同梱 curtin の `_get_image_stack` で確認)。再層化に合わせた
+  カタログを `/casper/install-sources.yaml` に置けば Server の
+  自動インストールが進む見込みだが、ISO の再組立と再検証が必要で、
+  今回は未実施である。
