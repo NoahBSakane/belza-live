@@ -7,7 +7,8 @@
 `casper/bootkit-chains/<os>.list` に挙がった層の列だけを tmpfs (`/bootkit-ram`)
 へ複写し、casper 本体にはその tmpfs を媒体 (`livefs_root`) として使わせる。
 `pool/`・他の OS の層・他の `initrd.<os>`・連鎖に無い層は載らない。
-複写後に元の媒体の参照は残らないため、起動後に USB を抜ける。
+複写後の層の参照先は RAM 内だけで、元媒体のマウントは残らないため、
+起動後に USB を抜ける。
 複写に失敗したとき (RAM 不足・媒体が見えない・層の欠落・写し誤り) は、
 理由を出して停止する (`panic` 相当)。黙って媒体参照のまま続けない。
 `toram` が無いとき、または `bootkit.os` が無いときは何もしない
@@ -189,3 +190,13 @@ RAM 不足は Server toram / 1,280MiB の VM で確認。必要 1,582,669,824 �
 - premount 時点の `/dev/mapper/ventoy` の可視性は未確認 (再試行あり)。
 - 再層化 (B2) 後の層名・連鎖が変われば、`.list` と `layerfs-path` を
   合わせ直す (本処理の変更は要らない)。
+
+## Ventoy 1.1.18 の経路
+
+QEMU/UEFI の 3 OS と BIOS の Server の Ventoy GRUB2 モードでは、ISO 内の GRUB と追加 cpio が
+読み込まれ、premount が `/dev/mapper/ventoy` を検出した。媒体の探索方法は
+直起動と共通で、変更していない。injection や conf_replace を設定しない
+ディスクでの実測である。取り外し後も未マウントの mapper が残り、Server では
+その mapper に Buffer I/O エラーが出た。層の読出し・Python・APT は成功した。
+OS ごとの起動・取り外し結果と通常モードの制約は
+[Ventoy QEMU 検証](ventoy-qemu.md)を参照する。

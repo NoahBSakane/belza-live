@@ -1,0 +1,8 @@
+{
+  "menu_alias": [
+    {
+      "image": "/ISO/live/ubuntu-merge-26.04.1-amd64.iso",
+      "alias": "Ubuntu / Lubuntu / Server 26.04.1 (shared layers; GRUB2 mode)"
+    }
+  ]
+}

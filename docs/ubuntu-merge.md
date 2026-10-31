@@ -194,8 +194,12 @@ UUID 照合の無効化や casper 本体の置換はしていない。
 
 公式 ISO の素の toram との量の比較は [RAM 選択複写](ubuntu-ramsel.md) を参照。
 公式比較は元の kernel / initrd と BIOS direct、統合 ISO は UEFI / GRUB である。
-実機・Ventoy の実起動・Secure Boot・統合 ISO の BIOS と safe graphics の
-実起動は未検証。新規 ISO 組立経路の全体は今回再実行せず、既存 ISO の
+Ventoy 1.1.18 経由の検証は [Ventoy QEMU 検証](ventoy-qemu.md)を参照。
+GRUB2 モードで ISO 内の GRUB と追加 cpio を使い、3 OS の選択複写・
+USB 取り外し後の全層読出し・Python・APT が成功した。Server の残留 mapper
+のログ上のエラーと、通常起動モードの制約は同記録に明記している。
+Ventoy / BIOS は Server の toram と取り外しも確認した。
+実機・Secure Boot・Lubuntu / Ubuntu の BIOS と safe graphics の実起動は未検証。新規 ISO 組立経路の全体は今回再実行せず、既存 ISO の
 差分更新を実施した。最終 ISO の SHA-256 は
 `761b156da9d45fd9b666d6a6cb42dd4fd1e961063c8a7bfeab6937ba560a7d04`
 (`build/evidence/B2/iso.sha256`)。`make test` 全件合格、

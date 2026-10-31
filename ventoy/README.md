@@ -1,5 +1,14 @@
 # Ventoy の USB 用の一式
 
+## 共通層の統合 ISO (B2)
+
+Ubuntu・Lubuntu・Server が共通層を共有する ISO の設定は
+[merge/](merge/README.md)、Ventoy 1.1.18 / QEMU の実測は
+[統合 ISO の検証記録](../docs/ventoy-qemu.md)を参照する。
+Ventoy では ISO を選択後に **Boot in grub2 mode** を使う。
+統合 ISO 内の GRUB と追加 cpio により OS を選択し、RAM 選択複写を行う。
+以下の追加パックとは別の構成である。
+
 公式の `ubuntu-26.04.1-desktop-amd64.iso` だけを使い、Live 起動では文字画面・LXQt・GNOME、自動インストールでは Ubuntu with Server・Lubuntu-modoki・Ubuntu Server-modoki を選ぶための設定。Lubuntu-modoki・Ubuntu Server-modoki の追加機能は ISO に含まれず、Live 起動では追加パックで永続化領域へ導入する(`modoki` は「もどき(それに近い、同じ公式配布物ではない)」の意味)。**実機では未検証**であり、既存 USB へ自動で書き込む仕組みは含めない。
 
 Ventoy は **1.1.18 以上**を使う。依頼元で確認済みの情報では、1.1.11 に Ubuntu のインストールが失敗する既知の問題があり、1.1.12 で修正されている。この一式では 1.1.18 を前提にする。

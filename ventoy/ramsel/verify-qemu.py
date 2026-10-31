@@ -2,6 +2,7 @@
 """試作 ISO / 公式 ISO を QEMU で起動し、RAM 選択複写を検証する。標準ライブラリのみ。
 
 uefi-grub: OVMF で ISO を起動し、grub 項目を番号で選ぶ (試作 ISO 用)。
+ventoy-uefi / ventoy-bios: raw の検証ディスクを個別 qcow2 差分経由の USB として起動。
 bios-direct: SeaBIOS + -kernel/-initrd/-append で起動する (公式 ISO の比較・対照用)。
 どちらも serial (unix socket) でログイン・操作し、HMP で取り外し・撮影する。
 
@@ -47,8 +48,10 @@ def parse_args():
     parser.add_argument('--desktop', choices=('gnome', 'lxqt'))
     parser.add_argument('--gui-wait', type=seconds, default=30, help='GUI プロセス検出後の描画待ち秒数')
     parser.add_argument('--root-shell', action='store_true')
-    parser.add_argument('--mode', choices=('uefi-grub', 'bios-direct'), required=True)
+    parser.add_argument('--mode', choices=('uefi-grub', 'ventoy-uefi', 'ventoy-bios', 'bios-direct'), required=True)
     parser.add_argument('--iso', type=Path, required=True)
+    parser.add_argument('--ventoy-mode', choices=('normal', 'grub2'), default='normal')
+    parser.add_argument('--ventoy-disk', type=Path, help='作業ツリー内の検証専用 raw ディスク')
     parser.add_argument('--mem', type=positive_int, required=True, help='MiB')
     parser.add_argument('--smp', type=positive_int, default=4)
     parser.add_argument('--prefix', type=Path, required=True)
@@ -72,6 +75,12 @@ def parse_args():
         parser.error('bios-direct には --kernel と --initrd が要ります')
     if args.entry < 0:
         parser.error('--entry は 0 以上を指定してください')
+    if args.mode in ('ventoy-uefi', 'ventoy-bios'):
+        if args.ventoy_disk is None or not args.ventoy_disk.is_file():
+            parser.error('Ventoy モードには --ventoy-disk が要ります')
+        args.ventoy_disk = args.ventoy_disk.resolve()
+        if not args.ventoy_disk.is_relative_to(Path.cwd().resolve()):
+            parser.error('検証ディスクは作業ツリー内に置いてください')
     args.iso = args.iso.resolve()
     args.prefix = args.prefix.absolute()
     return args
@@ -128,7 +137,7 @@ class PipeConnection:
             os.close(self.writer)
 
 
-def keyboard(monitor, line, transcript):
+def keyboard(monitor, line, transcript, key_delay=0.08, key_hold=None):
     keys = {' ': 'spc', '=': 'equal', '-': 'minus', '.': 'dot',
             '/': 'slash', ':': 'shift-semicolon', ',': 'comma',
             '_': 'shift-minus', '@': 'shift-2', "'": 'apostrophe'}
@@ -136,8 +145,9 @@ def keyboard(monitor, line, transcript):
         key = keys.get(char, char)
         if char.isupper():
             key = 'shift-' + char.lower()
-        monitor.send('sendkey ' + key, 'grub 入力', transcript)
-        time.sleep(0.08)
+        hold = '' if key_hold is None else f' {key_hold}'
+        monitor.send('sendkey ' + key + hold, 'grub 入力', transcript)
+        time.sleep(key_delay)
     monitor.send('sendkey ret', 'grub 入力確定', transcript)
 
 
@@ -280,16 +290,22 @@ def build_command(args, monitor_path, serial_path, code, variables):
     cmd = ['qemu-system-x86_64', '-machine', args.machine,
            '-accel', 'tcg,thread=multi', '-cpu', 'Westmere,-aes',
            '-smp', str(args.smp), '-m', str(args.mem)]
-    if args.mode == 'uefi-grub':
+    if args.mode in ('uefi-grub', 'ventoy-uefi'):
         cmd += ['-drive', f'if=pflash,format=raw,readonly=on,file={drive_path(code)}',
                 '-drive', f'if=pflash,format=raw,file={drive_path(variables)}']
-    else:
+    elif args.mode == 'bios-direct':
         cmd += ['-kernel', str(args.kernel), '-initrd', str(args.initrd),
                 '-append', args.append]
-    cmd += ['-drive', f'id=cd0,if=none,media=cdrom,readonly=on,file={drive_path(args.iso)}',
-            '-device', 'ide-cd,drive=cd0',
+    if args.mode in ('ventoy-uefi', 'ventoy-bios'):
+        cmd += ['-drive', f'id=usb0,if=none,format=qcow2,file={drive_path(args.ventoy_overlay)}',
+                '-device', 'qemu-xhci,id=xhci',
+                '-device', 'usb-storage,id=ventoyusb,drive=usb0,bootindex=1']
+    else:
+        cmd += ['-drive', f'id=cd0,if=none,media=cdrom,readonly=on,file={drive_path(args.iso)}',
+                '-device', 'ide-cd,drive=cd0']
+    cmd += [
             '-vga', 'std', '-usb', '-device', 'usb-kbd',
-            '-boot', 'd', '-display', 'none',
+            '-boot', 'c' if args.mode in ('ventoy-uefi', 'ventoy-bios') else 'd', '-display', 'none',
             '-monitor', ('stdio' if args.transport == 'pipe' else f'unix:{monitor_path},server=on,wait=off'),
             '-serial', (f'pipe:{serial_path}' if args.transport == 'pipe' else f'unix:{serial_path},server=on,wait=off'),
             '-net', 'none']
@@ -303,7 +319,7 @@ MEASURE_COMMANDS = [
     ('head -5 /proc/meminfo; echo MEM_DONE', 'MEM_DONE'),
     ('cat /proc/mounts; echo MOUNTS_DONE', 'MOUNTS_DONE'),
     ('findmnt -n -o SOURCE,TARGET,FSTYPE; echo FINDMNT_DONE', 'FINDMNT_DONE'),
-    ('losetup -a; echo LOS_DONE', 'LOS_DONE'),
+    ('losetup -a; sudo -n dmsetup ls; echo LOS_DONE', 'LOS_DONE'),
     ("find /cdrom/casper -maxdepth 1 -type f -printf '%f %s\\n'; echo FILES_DONE", 'FILES_DONE'),
 ]
 
@@ -311,7 +327,7 @@ POST_DETACH_COMMANDS = [
     ("sudo -n sh -c 'echo 3 > /proc/sys/vm/drop_caches; status=0; count=0; for dev in $(losetup -ln -O NAME,BACK-FILE | awk \"/common.*[.]squashfs$/ {print \\$1}\"); do count=$((count + 1)); echo READ_DEVICE=$dev; timeout 300 dd if=$dev of=/dev/null bs=4M || status=1; done; test $count -gt 0 || status=1; echo READ_LAYER_COUNT=$count; echo MEDIA_READ_RC=$status'; echo WALK_DONE", 'WALK_DONE'),
     ('python3 -c "print(\'PY_OK\')"; echo PY_DONE', 'PY_DONE'),
     ('sudo -n apt-get check; echo APT_RC=$?; echo APT_DONE', 'APT_DONE'),
-    ('dmesg | tail -35; cat /proc/mounts; losetup -a; echo AFTER_DONE', 'AFTER_DONE'),
+    ('dmesg | tail -35; findmnt; cat /proc/mounts; losetup -a; sudo -n dmsetup ls; echo AFTER_DONE', 'AFTER_DONE'),
 ]
 
 
@@ -365,10 +381,14 @@ def main():
     control_thread = None
     deadline = time.monotonic() + args.timeout
     try:
-        code = firmware_code() if args.mode == 'uefi-grub' else None
-        if args.mode == 'uefi-grub':
+        code = firmware_code() if args.mode in ('uefi-grub', 'ventoy-uefi') else None
+        if args.mode in ('uefi-grub', 'ventoy-uefi'):
             variables = prefix.parent / (prefix.name + '.vars.fd')
             shutil.copyfile(vars_template(args), variables)
+        if args.mode in ('ventoy-uefi', 'ventoy-bios'):
+            args.ventoy_overlay = Path(str(prefix) + '.overlay.qcow2')
+            subprocess.run(['qemu-img', 'create', '-f', 'qcow2', '-F', 'raw',
+                            '-b', str(args.ventoy_disk), str(args.ventoy_overlay)], check=True)
         command = build_command(args, monitor_path, serial_path, code, variables)
         print(shlex.join(command), flush=True)
         with log_path.open('wb') as log:
@@ -416,11 +436,37 @@ def main():
                     offset = len(lines)
             control_thread = threading.Thread(target=control_commands, daemon=True)
             control_thread.start()
-            if args.mode == 'uefi-grub':
-                serial.expect('Try or Install Ubuntu', 600, 'grub メニュー待ち')
+            if args.mode in ('uefi-grub', 'ventoy-uefi', 'ventoy-bios'):
+                if args.mode in ('ventoy-uefi', 'ventoy-bios'):
+                    time.sleep(25)
+                    if args.mode == 'ventoy-bios':
+                        monitor.send('sendkey c', 'BIOS serial 診断の設定', transcript)
+                        time.sleep(2)
+                        for line in ('serial --speed=115200',
+                                     'terminal_output console serial',
+                                     'set vtoy_display_mode=serial_console'):
+                            keyboard(monitor, line, transcript, key_delay=0.2, key_hold=50)
+                            time.sleep(2)
+                        monitor.send('sendkey esc', 'Ventoy メニューへ戻る', transcript)
+                        time.sleep(2)
+                    monitor.send(f'screendump {json.dumps(str(prefix) + "-ventoy.png")} -f png', 'Ventoy メニュー', transcript)
+                    monitor.send('sendkey ret', '統合 ISO 選択', transcript)
+                    time.sleep(5)
+                    monitor.send(f'screendump {json.dumps(str(prefix) + "-ventoy-mode.png")} -f png', 'Ventoy 起動モード', transcript)
+                    if args.ventoy_mode == 'grub2':
+                        monitor.send('sendkey down', 'GRUB2 モードを選択', transcript)
+                        time.sleep(1)
+                    monitor.send('sendkey ret', 'Ventoy 起動モードを確定', transcript)
+                    serial.expect('Try or Install Ubuntu', 180, 'Ventoy 経由の ISO メニュー待ち')
+                    monitor.send('sendkey home', 'ISO メニューの時間制限を停止し先頭へ', transcript)
+                    monitor.send(f'screendump {json.dumps(str(prefix) + "-iso-menu.png")} -f png', 'ISO 内の GRUB', transcript)
+                else:
+                    serial.expect('Try or Install Ubuntu', 600, 'grub メニュー待ち')
                 monitor.send('sendkey c', 'grub コンソール', transcript)
                 time.sleep(2)
-                keyboard(monitor, "set bootkit_extra='" + args.extra_args + "'", transcript)
+                keyboard(monitor, "set bootkit_extra='" + args.extra_args + "'", transcript,
+                         key_delay=0.2 if args.mode == 'ventoy-bios' else 0.08,
+                         key_hold=50 if args.mode == 'ventoy-bios' else None)
                 monitor.send('sendkey esc', 'grub メニューへ戻る', transcript)
                 time.sleep(2)
                 monitor.send(f'screendump {json.dumps(str(prefix) + "-grub.png")} -f png', 'grub 撮影', transcript)
@@ -469,8 +515,26 @@ def main():
                     transcript.append('[serial] パスワード不要で進行\n')
                 prompt = serial.expect([b'$ ', b'# '], 60, 'プロンプト待ち')
                 prompt = prompt.strip()
+            measured = {}
             for command, marker in MEASURE_COMMANDS:
-                serial.run(command, marker.encode(), 300, command)
+                measured[marker] = serial.run(command, marker.encode(), 300, command)
+            if args.mode in ('ventoy-uefi', 'ventoy-bios') and args.expect_os is not None:
+                expected = {
+                    'server': {'common.squashfs': 1297666048, 'common.server.squashfs': 217894912},
+                    'lubuntu': {'common.squashfs': 1297666048, 'common.dl.squashfs': 472125440,
+                                'common.dl.lubuntu.squashfs': 1980141568},
+                    'ubuntu': {'common.squashfs': 1297666048, 'common.dl.squashfs': 472125440,
+                               'common.dl.ubuntu.squashfs': 2952462336},
+                }[args.expect_os]
+                actual = {name: int(size) for name, size in re.findall(
+                    r'(?m)^(common[^ ]*[.]squashfs) (\d+)$', measured['FILES_DONE'])}
+                if actual != expected:
+                    raise RuntimeError(f'選択された層が不一致: {actual!r}')
+                if not re.search(r'(?m)^tmpfs /cdrom tmpfs ', measured['MOUNTS_DONE']):
+                    raise RuntimeError('/cdrom が選択複写先の tmpfs ではない')
+                if re.search(r'(?m)^/dev/(?:mapper/ventoy|sd\w+|dm-\d+) ', measured['MOUNTS_DONE']):
+                    raise RuntimeError('元媒体の mount が残っている')
+                transcript.append(f'[判定] {args.expect_os}: tmpfs /cdrom、層 {len(actual)} 個、合計 {sum(actual.values())} バイト\n')
             if args.desktop:
                 monitor.send(f'screendump {json.dumps(str(prefix) + "-gui-start.png")} -f png', 'GUI 確認前の撮影', transcript)
                 name = {'gnome': 'gnome-shell', 'lxqt': 'lxqt-session'}[args.desktop]
@@ -484,12 +548,24 @@ def main():
                          'デスクトップ撮影', transcript)
             if args.detach:
                 monitor.send('info block', '取り外し前の確認', transcript)
-                monitor.send('eject -f cd0', 'ISO 取り外し', transcript)
+                if args.mode in ('ventoy-uefi', 'ventoy-bios'):
+                    monitor.send('device_del ventoyusb', '仮想 USB 取り外し', transcript)
+                    time.sleep(10)
+                    tree = monitor.send('info qtree', 'USB 装置の削除確認', transcript)
+                    if 'id \"ventoyusb\"' in tree:
+                        raise RuntimeError('仮想 USB が残っている')
+                else:
+                    monitor.send('eject -f cd0', 'ISO 取り外し', transcript)
                 time.sleep(5)
                 monitor.send('info block', '取り外し後の確認', transcript)
                 for command, marker in POST_DETACH_COMMANDS:
                     try:
                         result = serial.run(command, marker.encode(), 900, command)
+                        if not args.expect_detach_failure:
+                            if marker == 'PY_DONE' and not re.search(r'(?m)^PY_OK$', result):
+                                raise RuntimeError('USB 取り外し後の Python 起動を確認できない')
+                            if marker == 'APT_DONE' and not re.search(r'(?m)^APT_RC=0$', result):
+                                raise RuntimeError('USB 取り外し後の apt-get check が成功していない')
                         if marker == 'WALK_DONE':
                             match = re.search(r'(?m)^MEDIA_READ_RC=(\d+)\r?$', result)
                             if match is None:
@@ -503,6 +579,7 @@ def main():
                     except TimeoutError as error:
                         transcript.append(f'[判定] 取り外し後の操作で応答なし: {error}\n')
                         raise
+                monitor.send(f'screendump {json.dumps(str(prefix) + "-after-usb.png")} -f png', '取り外し後の画面', transcript)
                 transcript.append('[判定] 取り外し後の操作が完了\n')
             monitor.send('quit', '終了', transcript)
             try:

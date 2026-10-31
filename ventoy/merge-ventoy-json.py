@@ -25,6 +25,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("existing", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--profile", choices=("modoki", "ubuntu-merge"), default="modoki",
+                        help="ubuntu-merge は共通層の統合 ISO 用の設定だけを統合する")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--in-place", action="store_true")
     args = parser.parse_args()
@@ -37,12 +39,19 @@ def main():
         data = json.loads(args.existing.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("ventoy.json の最上位はオブジェクトが必要です")
-        for key, entry in ENTRIES.items():
+        iso = ISO
+        entries = ENTRIES
+        if args.profile == "ubuntu-merge":
+            template = Path(__file__).resolve().parent / "merge" / "ventoy.json"
+            profile = json.loads(template.read_text(encoding="utf-8"))
+            entries = {key: items[0] for key, items in profile.items()}
+            iso = entries["menu_alias"]["image"]
+        for key, entry in entries.items():
             old = data.get(key, [])
             if not isinstance(old, list) or any(not isinstance(item, dict) for item in old):
                 raise ValueError(f"{key} はオブジェクトの配列が必要です")
             match_key = "iso" if key == "conf_replace" else "image"
-            data[key] = [item for item in old if item.get(match_key) != ISO] + [entry]
+            data[key] = [item for item in old if item.get(match_key) != iso] + [entry]
         result = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
         if args.dry_run:
             print(result, end="")
